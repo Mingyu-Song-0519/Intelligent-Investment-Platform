@@ -333,24 +333,38 @@ class LSTMPredictor:
             with open(feature_path, 'rb') as f:
                 self.preprocessor.feature_columns = pickle.load(f)
         else:
-            # 기본 feature columns 사용 (임시)
-            default_features = ['close', 'volume', 'rsi', 'macd', 'ma5', 'ma20']
+            # 기본 feature columns 사용
+            self.preprocessor.feature_columns = ['close', 'volume', 'rsi', 'macd', 'ma5', 'ma20']
             
-            # 모델의 입력 형태 확인 후 Feature 수 맞춤
-            # model.input_shape는 (None, seq_len, n_features) 형태
-            try:
-                if hasattr(self.model, 'input_shape'):
-                    n_features = self.model.input_shape[-1]
-                    if n_features < len(default_features):
-                        self.preprocessor.feature_columns = default_features[:n_features]
-                        print(f"[INFO] 모델 입력 차원({n_features})에 맞춰 Feature 자동 조정: {self.preprocessor.feature_columns}")
+        # [중요] 모델의 실제 입력 형태와 Feature 개수 일치 보장
+        # 파일에서 로드했더라도 모델과 다를 수 있으므로 검증 필수
+        try:
+            if hasattr(self.model, 'input_shape'):
+                # model.input_shape는 (None, seq_len, n_features) 형태
+                n_features_model = self.model.input_shape[-1]
+                n_features_cols = len(self.preprocessor.feature_columns)
+                
+                if n_features_model != n_features_cols:
+                    print(f"[WARNING] Feature 불일치 감지! 모델: {n_features_model}, 설정값: {n_features_cols}")
+                    
+                    # 1. 모델이 더 적은 경우 -> 잘라내기
+                    if n_features_model < n_features_cols:
+                        self.preprocessor.feature_columns = self.preprocessor.feature_columns[:n_features_model]
+                        print(f"[INFO] Feature 자동 축소: {self.preprocessor.feature_columns}")
+                    
+                    # 2. 모델이 더 많은 경우 -> 기본값에서 추가 (또는 패딩 처리 필요하지만 여기선 경고만)
                     else:
-                        self.preprocessor.feature_columns = default_features
-                else:
-                    self.preprocessor.feature_columns = default_features
-            except Exception as e:
-                print(f"[WARNING] Feature 자동 조정 실패: {e}")
-                self.preprocessor.feature_columns = default_features
+                        st.warning(f"모델이 더 많은 Feature({n_features_model})를 요구합니다. 재학습이 권장됩니다.")
+                        # 임시로 기본 컬럼에서 모자란 만큼 채워넣기 시도 (위험하지만 에러 방지용)
+                        default_pool = ['close', 'volume', 'rsi', 'macd', 'ma5', 'ma20', 'ma60', 'ma120']
+                        current = self.preprocessor.feature_columns
+                        for col in default_pool:
+                            if col not in current and len(current) < n_features_model:
+                                current.append(col)
+                        self.preprocessor.feature_columns = current
+                        
+        except Exception as e:
+            print(f"[WARNING] Feature 자동 조정 중 오류: {e}")
         
         print(f"[INFO] 모델 로드 완료: {model_path}")
     
