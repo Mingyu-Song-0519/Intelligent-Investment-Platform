@@ -71,11 +71,15 @@ def setup_page():
             min-height: 100px; /* 높이 확보 */
         }
         
-        /* 모바일 당겨서 새로고침 방지 (스크롤 개선) - 제거됨 (부작용 방지)
-        html, body {
-            overscroll-behavior-y: none !important;
+        /* Plotly 차트 모바일 스크롤 강제 허용 (핵심) */
+        .js-plotly-plot, .plot-container, .main-svg {
+            touch-action: pan-y !important; /* 수직 스크롤 허용 */
         }
-        */
+        
+        /* 모바일 당겨서 새로고침 방지 (스크롤 개선) */
+        html, body {
+            overscroll-behavior-y: none !important; /* Pull-to-refresh 차단 */
+        }
         
         .positive {
             color: #00d775;
