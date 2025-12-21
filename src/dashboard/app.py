@@ -52,12 +52,30 @@ def setup_page():
         .main {
             padding: 1rem;
         }
+        /* 모바일 텍스트 잘림 방지 */
+        div[data-testid="stMetricValue"] {
+            font-size: 1.2rem !important;
+            word-wrap: break-word !important;
+            white-space: normal !important;
+        }
+        div[data-testid="stMetricLabel"] {
+            font-size: 0.9rem !important;
+            word-wrap: break-word !important;
+            white-space: normal !important;
+        }
         .stMetric {
             background-color: var(--background-secondary-color, rgba(128, 128, 128, 0.1));
-            padding: 1rem;
+            padding: 0.5rem !important; /* 패딩 축소 */
             border-radius: 0.5rem;
             border: 1px solid var(--border-color, rgba(128, 128, 128, 0.2));
+            min-height: 100px; /* 높이 확보 */
         }
+        
+        /* 모바일 당겨서 새로고침 방지 (스크롤 개선) */
+        html, body {
+            overscroll-behavior-y: none !important;
+        }
+        
         .positive {
             color: #00d775;
         }
