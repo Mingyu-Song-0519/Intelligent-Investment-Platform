@@ -1,0 +1,19 @@
+💾 저장된 모델을 불러오는 중입니다... (005930.KS_20251221)
+
+✅ 모델 로드 완료!
+
+예측 수행 중...
+
+예측 중 오류 발생: 'NoneType' object is not iterable
+
+Traceback (most recent call last):
+  File "D:\Stock\src\dashboard\app.py", line 927, in display_ai_prediction
+    price_pred = ensemble.predict_price(df)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Stock\src\models\ensemble_predictor.py", line 235, in predict_price
+    lstm_pred = self.lstm_predictor.predict(df, feature_cols)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Stock\src\models\predictor.py", line 269, in predict
+    available_cols = [col for col in feature_cols if col in df.columns]
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'NoneType' object is not iterable
