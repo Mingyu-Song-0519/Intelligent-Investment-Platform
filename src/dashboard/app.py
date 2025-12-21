@@ -235,7 +235,8 @@ def create_candlestick_chart(df: pd.DataFrame, ticker_name: str) -> go.Figure:
         showlegend=True,
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
         xaxis_rangeslider_visible=False,
-        # dragmode=False # 제거: fixedrange로 대체
+        dragmode=False, # 모바일 스크롤 위해 드래그 비활성화
+        hovermode="x unified" # 터치 시 호버 정보 표시
     )
     
     # X축 날짜 형식 한글화 및 모바일 스크롤 지원 (fixedrange=True)
@@ -548,12 +549,13 @@ def display_multi_stock_comparison():
                         yaxis_title="수익률 (%)",
                         template='plotly_dark',
                         height=500,
-                        xaxis_tickformat="%Y년 %m월"
+                        xaxis_tickformat="%Y년 %m월",
+                        dragmode=False # 드래그 비활성화
                     )
                     fig.update_xaxes(fixedrange=True)
                     fig.update_yaxes(fixedrange=True)
                     
-                    st.plotly_chart(fig, width='stretch', config={'scrollZoom': False})
+                    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False, 'scrollZoom': False})
 
                     # 상관관계 매트릭스
                     st.markdown("### 🔗 상관관계 분석")
@@ -570,10 +572,10 @@ def display_multi_stock_comparison():
                         aspect='auto',
                         title="종목 간 상관관계"
                     )
-                    fig_corr.update_layout(template='plotly_dark', height=400) # dragmode 제거
+                    fig_corr.update_layout(template='plotly_dark', height=400, dragmode=False)
                     fig_corr.update_xaxes(fixedrange=True)
                     fig_corr.update_yaxes(fixedrange=True)
-                    st.plotly_chart(fig_corr, width='stretch', config={'scrollZoom': False})
+                    st.plotly_chart(fig_corr, width='stretch', config={'displayModeBar': False, 'scrollZoom': False})
 
                     # 통계 요약
                     st.markdown("### 📊 통계 요약")
@@ -724,11 +726,12 @@ def display_news_sentiment():
             xaxis_title="감성 점수 (-1: 부정, +1: 긍정)",
             yaxis_title="뉴스 개수",
             template='plotly_dark',
-            height=300
+            height=300,
+            dragmode=False
         )
         fig_sent.update_xaxes(fixedrange=True)
         fig_sent.update_yaxes(fixedrange=True)
-        st.plotly_chart(fig_sent, width='stretch', config={'scrollZoom': False})
+        st.plotly_chart(fig_sent, width='stretch', config={'displayModeBar': False, 'scrollZoom': False})
 
         # 평균 감성
         avg_sentiment = np.mean(sentiments)
