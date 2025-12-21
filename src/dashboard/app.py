@@ -215,7 +215,8 @@ def create_candlestick_chart(df: pd.DataFrame, ticker_name: str) -> go.Figure:
         template='plotly_dark',
         showlegend=True,
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
-        xaxis_rangeslider_visible=False
+        xaxis_rangeslider_visible=False,
+        dragmode=False  # 모바일 터치 스크롤 지원
     )
     
     # X축 날짜 형식 한글화
