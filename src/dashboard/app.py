@@ -1853,23 +1853,35 @@ def main():
         st.session_state.currency_symbol = "$"
         st.session_state.ticker_suffix = ""
         
-        # 미국 주식 목록 로드 (캐싱 적용)
+        # 미국 인기 종목 (즉시 로딩)
         if 'us_stock_list' not in st.session_state:
-            with st.spinner("🇺🇸 미국 종목 목록 로딩 중..."):
-                stock_dict, stock_names = get_cached_stock_listing('US')
-                if stock_dict:
-                    st.session_state.us_stock_list = stock_dict
-                    st.session_state.us_stock_names = stock_names
-                else:
-                    # 폴백: 기본 인기 종목
-                    us_stocks = {
-                        "Apple (AAPL)": "AAPL", "Microsoft (MSFT)": "MSFT", "Google (GOOGL)": "GOOGL",
-                        "Amazon (AMZN)": "AMZN", "Tesla (TSLA)": "TSLA", "NVIDIA (NVDA)": "NVDA",
-                        "Meta (META)": "META", "Netflix (NFLX)": "NFLX", "AMD (AMD)": "AMD",
-                        "S&P 500 ETF (SPY)": "SPY", "NASDAQ 100 ETF (QQQ)": "QQQ"
-                    }
-                    st.session_state.us_stock_list = us_stocks
-                    st.session_state.us_stock_names = list(us_stocks.keys())
+            us_stocks = {
+                # 빅테크
+                "Apple (AAPL)": "AAPL", "Microsoft (MSFT)": "MSFT", "Google (GOOGL)": "GOOGL",
+                "Amazon (AMZN)": "AMZN", "Meta (META)": "META", "NVIDIA (NVDA)": "NVDA",
+                # 인기 종목
+                "Tesla (TSLA)": "TSLA", "Netflix (NFLX)": "NFLX", "AMD (AMD)": "AMD",
+                "Intel (INTC)": "INTC", "PayPal (PYPL)": "PYPL", "Adobe (ADBE)": "ADBE",
+                "Salesforce (CRM)": "CRM", "Cisco (CSCO)": "CSCO", "Oracle (ORCL)": "ORCL",
+                # 반도체
+                "Qualcomm (QCOM)": "QCOM", "Broadcom (AVGO)": "AVGO", "Texas Instruments (TXN)": "TXN",
+                # 소비재/금융
+                "Disney (DIS)": "DIS", "Coca-Cola (KO)": "KO", "Pepsi (PEP)": "PEP",
+                "Nike (NKE)": "NKE", "McDonald's (MCD)": "MCD", "Starbucks (SBUX)": "SBUX",
+                "Walmart (WMT)": "WMT", "Costco (COST)": "COST",
+                # 금융
+                "JPMorgan (JPM)": "JPM", "Goldman Sachs (GS)": "GS", "Bank of America (BAC)": "BAC",
+                "Visa (V)": "V", "Mastercard (MA)": "MA",
+                # 헬스케어
+                "Johnson & Johnson (JNJ)": "JNJ", "Pfizer (PFE)": "PFE", "UnitedHealth (UNH)": "UNH",
+                # 기타
+                "Boeing (BA)": "BA", "IBM (IBM)": "IBM", "3M (MMM)": "MMM",
+                # ETF
+                "S&P 500 ETF (SPY)": "SPY", "NASDAQ 100 ETF (QQQ)": "QQQ", 
+                "Dow Jones ETF (DIA)": "DIA", "Russell 2000 ETF (IWM)": "IWM"
+            }
+            st.session_state.us_stock_list = us_stocks
+            st.session_state.us_stock_names = list(us_stocks.keys())
         
         st.session_state.active_stock_list = st.session_state.us_stock_list
         st.session_state.active_stock_names = st.session_state.us_stock_names
