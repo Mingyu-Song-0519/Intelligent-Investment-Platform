@@ -816,11 +816,17 @@ def display_news_sentiment():
                     
                     # session_state에 저장
                     st.session_state['news_articles'] = all_articles
-                    st.session_state['news_naver_count'] = len(naver_articles)
-                    st.session_state['news_google_count'] = len(google_articles)
-                    st.session_state['news_filtered_count'] = len(all_articles_raw) - len(all_articles)
                     
-                    st.success(f"✅ 총 {len(all_articles)}개 뉴스 (네이버: {len(naver_articles)}, 구글: {len(google_articles)}, 중복 제거: {len(all_articles_raw) - len(all_articles)}개)")
+                    # 시장별 수집 결과 표시
+                    if current_market == 'US':
+                        st.session_state['news_yahoo_count'] = len(yahoo_articles)
+                        st.session_state['news_google_count'] = len(google_articles)
+                        st.success(f"✅ 총 {len(all_articles)}개 뉴스 (Yahoo: {len(yahoo_articles)}, Google: {len(google_articles)}, 중복 제거: {len(all_articles_raw) - len(all_articles)}개)")
+                    else:
+                        st.session_state['news_naver_count'] = len(naver_articles)
+                        st.session_state['news_google_count'] = len(google_articles)
+                        st.success(f"✅ 총 {len(all_articles)}개 뉴스 (네이버: {len(naver_articles)}, 구글: {len(google_articles)}, 중복 제거: {len(all_articles_raw) - len(all_articles)}개)")
+                    st.session_state['news_filtered_count'] = len(all_articles_raw) - len(all_articles)
                 else:
                     st.warning("수집된 뉴스가 없습니다")
                     st.session_state['news_articles'] = []
