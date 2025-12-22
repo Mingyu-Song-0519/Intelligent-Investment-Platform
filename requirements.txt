@@ -34,7 +34,7 @@ feedparser>=6.0.10
 textblob>=0.17.0
 vaderSentiment>=3.3.2
 transformers>=4.30.0
-torch>=2.0.0 --index-url https://download.pytorch.org/whl/cpu
+torch
 
 # Phase 4 - Real-time Data
 websockets>=12.0
