@@ -14,8 +14,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import MODEL_CONFIG, MODELS_DIR
 
-# TensorFlow 경고 메시지 억제
+# Keras 백엔드 설정 (JAX 사용)
 import os
+os.environ['KERAS_BACKEND'] = 'jax'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # sklearn 경고 메시지 억제
@@ -23,14 +24,22 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 try:
-    import tensorflow as tf
-    from tensorflow.keras.models import Sequential, load_model
-    from tensorflow.keras.layers import LSTM, Dense, Dropout
-    from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-    TENSORFLOW_AVAILABLE = True
+    import keras
+    from keras.models import Sequential, load_model
+    from keras.layers import LSTM, Dense, Dropout
+    from keras.callbacks import EarlyStopping, ModelCheckpoint
+    TENSORFLOW_AVAILABLE = True  # Keras 사용 가능 (JAX 백엔드)
 except ImportError:
-    TENSORFLOW_AVAILABLE = False
-    print("[WARNING] TensorFlow not installed. LSTM model will not be available.")
+    try:
+        # Fallback to TensorFlow Keras
+        import tensorflow as tf
+        from tensorflow.keras.models import Sequential, load_model
+        from tensorflow.keras.layers import LSTM, Dense, Dropout
+        from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+        TENSORFLOW_AVAILABLE = True
+    except ImportError:
+        TENSORFLOW_AVAILABLE = False
+        print("[WARNING] Keras/TensorFlow not installed. LSTM model will not be available.")
 
 try:
     from xgboost import XGBClassifier

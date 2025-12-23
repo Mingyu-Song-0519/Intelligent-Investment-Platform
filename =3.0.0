@@ -1,0 +1,42 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting jax
+  Downloading jax-0.8.2-py3-none-any.whl.metadata (13 kB)
+Collecting jaxlib
+  Downloading jaxlib-0.8.2-cp314-cp314-win_amd64.whl.metadata (1.4 kB)
+Collecting keras
+  Using cached keras-3.13.0-py3-none-any.whl.metadata (6.3 kB)
+Collecting ml_dtypes>=0.5.0 (from jax)
+  Downloading ml_dtypes-0.5.4-cp314-cp314-win_amd64.whl.metadata (9.2 kB)
+Requirement already satisfied: numpy>=2.0 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from jax) (2.2.6)
+Collecting opt_einsum (from jax)
+  Using cached opt_einsum-3.4.0-py3-none-any.whl.metadata (6.3 kB)
+Requirement already satisfied: scipy>=1.13 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from jax) (1.16.3)
+Collecting absl-py (from keras)
+  Using cached absl_py-2.3.1-py3-none-any.whl.metadata (3.3 kB)
+Requirement already satisfied: rich in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from keras) (14.2.0)
+Collecting namex (from keras)
+  Using cached namex-0.1.0-py3-none-any.whl.metadata (322 bytes)
+Collecting h5py (from keras)
+  Using cached h5py-3.15.1-cp314-cp314-win_amd64.whl.metadata (3.1 kB)
+Collecting optree (from keras)
+  Downloading optree-0.18.0-cp314-cp314-win_amd64.whl.metadata (35 kB)
+Requirement already satisfied: packaging in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from keras) (25.0)
+Requirement already satisfied: typing-extensions>=4.6.0 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from optree->keras) (4.15.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from rich->keras) (4.0.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from rich->keras) (2.19.2)
+Requirement already satisfied: mdurl~=0.1 in c:\users\alsrb\appdata\roaming\python\python314\site-packages (from markdown-it-py>=2.2.0->rich->keras) (0.1.2)
+Downloading jax-0.8.2-py3-none-any.whl (2.9 MB)
+   ---------------------------------------- 2.9/2.9 MB 1.2 MB/s  0:00:02
+Downloading jaxlib-0.8.2-cp314-cp314-win_amd64.whl (62.7 MB)
+   ---------------------------------------- 62.7/62.7 MB 1.2 MB/s  0:00:54
+Using cached keras-3.13.0-py3-none-any.whl (1.5 MB)
+Downloading ml_dtypes-0.5.4-cp314-cp314-win_amd64.whl (221 kB)
+Using cached absl_py-2.3.1-py3-none-any.whl (135 kB)
+Downloading h5py-3.15.1-cp314-cp314-win_amd64.whl (2.9 MB)
+   ---------------------------------------- 2.9/2.9 MB 1.2 MB/s  0:00:02
+Using cached namex-0.1.0-py3-none-any.whl (5.9 kB)
+Using cached opt_einsum-3.4.0-py3-none-any.whl (71 kB)
+Downloading optree-0.18.0-cp314-cp314-win_amd64.whl (322 kB)
+Installing collected packages: namex, optree, opt_einsum, ml_dtypes, h5py, absl-py, jaxlib, keras, jax
+
+Successfully installed absl-py-2.3.1 h5py-3.15.1 jax-0.8.2 jaxlib-0.8.2 keras-3.13.0 ml_dtypes-0.5.4 namex-0.1.0 opt_einsum-3.4.0 optree-0.18.0

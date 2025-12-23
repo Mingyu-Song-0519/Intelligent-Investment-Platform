@@ -37,6 +37,9 @@ from src.backtest import Backtester, PerformanceMetrics
 from src.backtest import Backtester, PerformanceMetrics
 from src.backtest.strategies import RSIStrategy, MACDStrategy, MovingAverageStrategy
 from src.dashboard.realtime_tab import display_realtime_data
+from src.analyzers.volatility_analyzer import VolatilityAnalyzer
+from src.analyzers.market_breadth import MarketBreadthAnalyzer
+from src.analyzers.fundamental_analyzer import FundamentalAnalyzer
 
 
 def setup_page():
@@ -1053,7 +1056,7 @@ def display_ai_prediction():
             st.warning(f"모델 검색 중 오류: {e}")
 
     # Transformer 모델 및 저장 옵션
-    col_opt1, col_opt2 = st.columns(2)
+    col_opt1, col_opt2, col_opt3 = st.columns(3)
     with col_opt1:
         use_transformer = st.checkbox("🤖 Transformer 모델 포함", value=False, 
                                        disabled=use_saved_model,
@@ -1062,6 +1065,9 @@ def display_ai_prediction():
         start_save = st.checkbox("💾 학습된 모델 저장", value=True, 
                                  disabled=use_saved_model,
                                  help="새로 학습한 모델을 저장합니다.")
+    with col_opt3:
+        use_sentiment = st.checkbox("📰 감성 분석 포함", value=False,
+                                    help="뉴스 감성 점수를 AI 모델 입력으로 추가합니다. 예측 정확도가 향상될 수 있습니다.")
 
     if st.button("🚀 예측 실행", type="primary"):
         with st.spinner("모델 학습 및 예측 중..."):
@@ -1078,6 +1084,20 @@ def display_ai_prediction():
                 analyzer = TechnicalAnalyzer(df)
                 analyzer.add_all_indicators()
                 df = analyzer.get_dataframe()
+
+                # 감성 분석 피처 통합 (옵션)
+                feature_cols = None
+                if use_sentiment:
+                    st.info("📰 뉴스 감성 분석 중...")
+                    try:
+                        from src.models.sentiment_feature_integrator import create_enhanced_features
+                        current_market = st.session_state.get('current_market', 'KR')
+                        df, feature_cols = create_enhanced_features(
+                            df, ticker_code, ticker_name, current_market, include_sentiment=True
+                        )
+                        st.success(f"✅ 감성 피처 {len([c for c in feature_cols if 'sentiment' in c])}개 추가됨")
+                    except Exception as e:
+                        st.warning(f"감성 분석 생략: {str(e)}")
 
                 # 앙상블 예측 (LSTM + XGBoost + Transformer)
                 ensemble = EnsemblePredictor(strategy=strategy)
@@ -1943,6 +1963,91 @@ def main():
         st.session_state.active_stock_list = st.session_state.krx_stock_list
         st.session_state.active_stock_names = st.session_state.krx_stock_names
 
+    # 알림 설정 섹션
+    with st.sidebar:
+        with st.expander("🔔 알림 설정", expanded=False):
+            st.markdown("**주요 이벤트 알림 설정**")
+            
+            # 알림 활성화
+            alert_enabled = st.checkbox("알림 활성화", value=False, key="alert_enabled")
+            
+            if alert_enabled:
+                st.markdown("---")
+                st.markdown("**📊 임계값 설정**")
+                
+                vix_threshold = st.slider(
+                    "VIX 경고 임계값", 
+                    min_value=15, max_value=50, value=25,
+                    help="VIX가 이 값을 초과하면 경고 알림"
+                )
+                
+                mdd_threshold = st.slider(
+                    "MDD 경고 임계값 (%)", 
+                    min_value=5, max_value=30, value=10,
+                    help="최대 낙폭이 이 %를 초과하면 경고 알림"
+                )
+                
+                st.session_state.alert_config = {
+                    "vix_threshold": vix_threshold,
+                    "mdd_threshold": mdd_threshold,
+                    "enabled": True
+                }
+                
+                st.markdown("---")
+                st.markdown("**📬 알림 채널**")
+                
+                # Telegram 설정
+                telegram_enabled = st.checkbox("Telegram 알림", value=False)
+                if telegram_enabled:
+                    telegram_token = st.text_input(
+                        "Bot Token", 
+                        type="password",
+                        help="BotFather에서 발급받은 토큰"
+                    )
+                    telegram_chat = st.text_input(
+                        "Chat ID",
+                        help="@userinfobot으로 확인 가능"
+                    )
+                    st.session_state.telegram_config = {
+                        "token": telegram_token,
+                        "chat_id": telegram_chat
+                    }
+                
+                # Email 설정
+                email_enabled = st.checkbox("Email 알림", value=False)
+                if email_enabled:
+                    st.text_input("SMTP 서버", placeholder="smtp.gmail.com")
+                    st.text_input("이메일 주소", placeholder="your@email.com")
+                    st.text_input("앱 비밀번호", type="password")
+                    st.caption("※ Gmail은 앱 비밀번호 필요")
+            else:
+                st.session_state.alert_config = {"enabled": False}
+                st.caption("알림을 활성화하면 VIX 급등, MDD 초과 등 주요 이벤트를 알려드립니다.")
+        
+        # 매크로 현황 위젯
+        with st.expander("🌍 매크로 현황", expanded=False):
+            st.markdown("**주요 경제 지표**")
+            try:
+                from src.analyzers.macro_analyzer import MacroAnalyzer
+                macro = MacroAnalyzer()
+                widget_data = macro.get_sidebar_widget_data()
+                
+                if "error" not in widget_data:
+                    for key, data in widget_data.items():
+                        if data.get("value"):
+                            change = data.get("change", 0)
+                            delta_color = "normal" if change >= 0 else "inverse"
+                            st.metric(
+                                label=data["label"],
+                                value=f"{data['value']:.2f}",
+                                delta=f"{change:+.2f}%",
+                                delta_color=delta_color
+                            )
+                else:
+                    st.warning("데이터 로딩 실패")
+            except Exception as e:
+                st.caption(f"매크로 데이터 로딩 중... ({str(e)[:30]})")
+
     # 화면 분할 모드 토글
     split_mode = st.toggle("🖥️ 화면 분할 모드", value=False, help="두 개의 화면을 나란히 표시합니다 (와이드 모드 권장)")
     
@@ -2038,7 +2143,8 @@ def main():
             "🤖 AI 예측",
             "⏮️ 백테스팅",
             "💼 포트폴리오 최적화",
-            "⚠️ 리스크 관리"
+            "⚠️ 리스크 관리",
+            "🏥 시장 체력 진단"
         ]
         default_tab = "📊 단일 종목 분석"
     else:
@@ -2050,7 +2156,8 @@ def main():
             "🤖 AI 예측",
             "⏮️ 백테스팅",
             "💼 포트폴리오 최적화",
-            "⚠️ 리스크 관리"
+            "⚠️ 리스크 관리",
+            "🏥 시장 체력 진단"
         ]
         default_tab = "📊 단일 종목 분석"
     
@@ -2193,6 +2300,72 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
             display_signals(df)
             
+            # 펀더멘털 카드 (기업 가치 분석)
+            st.divider()
+            with st.expander("💰 펀더멘털 분석 (기업 가치)", expanded=False):
+                st.markdown("**기업의 재무 상태와 가치 평가 지표입니다.**")
+                
+                # 초보자 힌트
+                with st.popover("💡 용어 설명"):
+                    st.markdown(f"**PER**: {get_hint_text('PER', 'short')}")
+                    st.markdown(f"**ROE**: {get_hint_text('ROE', 'short')}")
+                
+                try:
+                    fund_analyzer = FundamentalAnalyzer(ticker_code)
+                    card_data = fund_analyzer.get_fundamental_card_data()
+                    
+                    # 종합 점수
+                    st.metric(
+                        label=f"📊 펀더멘털 점수 {card_data['grade']}",
+                        value=f"{card_data['score']}/100"
+                    )
+                    
+                    # 상세 지표
+                    fcol1, fcol2, fcol3, fcol4, fcol5 = st.columns(5)
+                    
+                    with fcol1:
+                        per_data = card_data['per']
+                        per_val = per_data['value']
+                        st.metric(
+                            label=f"{per_data['color']} PER",
+                            value=f"{per_val:.1f}" if per_val else "N/A"
+                        )
+                    
+                    with fcol2:
+                        pbr_data = card_data['pbr']
+                        pbr_val = pbr_data['value']
+                        st.metric(
+                            label=f"{pbr_data['color']} PBR",
+                            value=f"{pbr_val:.2f}" if pbr_val else "N/A"
+                        )
+                    
+                    with fcol3:
+                        roe_data = card_data['roe']
+                        roe_val = roe_data['value']
+                        st.metric(
+                            label=f"{roe_data['color']} ROE",
+                            value=f"{roe_val*100:.1f}%" if roe_val else "N/A"
+                        )
+                    
+                    with fcol4:
+                        debt_data = card_data['debt_ratio']
+                        debt_val = debt_data['value']
+                        st.metric(
+                            label=f"{debt_data['color']} 부채비율",
+                            value=f"{debt_val:.0f}%" if debt_val else "N/A"
+                        )
+                    
+                    with fcol5:
+                        div_data = card_data['dividend_yield']
+                        div_val = div_data['value']
+                        st.metric(
+                            label=f"{div_data['color']} 배당률",
+                            value=f"{div_val*100:.2f}%" if div_val else "N/A"
+                        )
+                    
+                except Exception as e:
+                    st.warning(f"펀더멘털 데이터를 가져올 수 없습니다: {str(e)}")
+            
             with st.expander("📋 원본 데이터 보기"):
                 st.dataframe(df[['date', 'open', 'high', 'low', 'close', 'volume', 'rsi', 'macd']].tail(30))
 
@@ -2213,6 +2386,9 @@ def main():
 
     elif selected_tab == "⚠️ 리스크 관리":
         display_risk_management()
+    
+    elif selected_tab == "🏥 시장 체력 진단":
+        display_market_breadth()
 
 
 def display_portfolio_optimization():
@@ -2583,6 +2759,108 @@ def display_risk_management():
 
             except Exception as e:
                 st.error(f"오류 발생: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+
+
+def display_market_breadth():
+    """시장 체력 진단 뷰"""
+    st.subheader("🏥 시장 체력 진단")
+    st.markdown("시장 전체가 건강한지, 소수 종목만 오르는지 분석합니다.")
+    
+    # 초보자 힌트
+    with st.expander("💡 시장 폭(Market Breadth)이란?", expanded=False):
+        st.markdown(get_hint_text('breadth', 'detail'))
+    
+    current_market = st.session_state.get('current_market', 'KR')
+    market_name = "한국 (KOSPI)" if current_market == "KR" else "미국 (NYSE/NASDAQ)"
+    
+    st.info(f"📊 현재 분석 대상: **{market_name}**")
+    
+    if st.button("🔍 시장 체력 분석 시작", type="primary"):
+        with st.spinner("시장 데이터 수집 및 분석 중... (약 30초 소요)"):
+            try:
+                # 시장 폭 분석
+                breadth_analyzer = MarketBreadthAnalyzer(market=current_market)
+                summary = breadth_analyzer.get_breadth_summary()
+                
+                # 변동성 분석 (VIX)
+                vol_analyzer = VolatilityAnalyzer()
+                vix_current = vol_analyzer.get_current_vix()
+                vix_regime, vix_color = vol_analyzer.volatility_regime()
+                
+                st.success("✅ 분석 완료!")
+                
+                # 종합 점수
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        label="🏆 시장 체력 점수",
+                        value=f"{summary['breadth_score']}/100",
+                        delta=summary['overall_status']
+                    )
+                with col2:
+                    if vix_current:
+                        st.metric(
+                            label=f"😱 VIX (공포지수) {vix_color}",
+                            value=f"{vix_current:.1f}",
+                            delta=vix_regime
+                        )
+                
+                st.markdown("---")
+                
+                # 상세 분석
+                col1, col2, col3 = st.columns(3)
+                
+                # 상승/하락 비율
+                with col1:
+                    st.markdown("### 📈 상승/하락 비율")
+                    ad = summary['advance_decline']
+                    if 'error' not in ad:
+                        st.metric("상승 종목", f"{ad['advancing']}개")
+                        st.metric("하락 종목", f"{ad['declining']}개")
+                        st.metric("상승/하락 비율", f"{ad['ratio']:.2f}")
+                        st.markdown(f"**{ad['breadth_status']}**")
+                    else:
+                        st.warning(ad['error'])
+                
+                # 신고가/신저가
+                with col2:
+                    st.markdown("### 🔝 52주 신고가/신저가")
+                    hl = summary['new_high_low']
+                    if 'error' not in hl:
+                        st.metric("신고가 종목", f"{hl['new_highs']}개")
+                        st.metric("신저가 종목", f"{hl['new_lows']}개")
+                        st.metric("신고가/신저가 비율", f"{hl['ratio']:.2f}")
+                        st.markdown(f"**{hl['status']}**")
+                    else:
+                        st.warning(hl['error'])
+                
+                # 집중도
+                with col3:
+                    st.markdown("### 🎯 시장 집중도")
+                    conc = summary['concentration']
+                    if 'error' not in conc:
+                        st.metric("상위 10종목 수익률", f"{conc['top10_return']:.1f}%")
+                        st.metric("전체 시장 수익률", f"{conc['market_return']:.1f}%")
+                        st.metric("집중도 비율", f"{conc['concentration_ratio']:.1f}배")
+                        st.markdown(f"**{conc['warning']}**")
+                    else:
+                        st.warning(conc['error'])
+                
+                # 해석 가이드
+                st.markdown("---")
+                st.markdown("### 📖 해석 가이드")
+                st.markdown("""
+                - **시장 체력 점수 70+**: 🟢 건강한 시장, 상승 종목이 많고 폭넓은 참여
+                - **시장 체력 점수 40-70**: 🟡 중립, 일부 섹터만 강세
+                - **시장 체력 점수 40 미만**: 🔴 취약, 소수 대형주만 지수 견인 (주의!)
+                - **VIX 15 미만**: 🟢 안정, 시장 불안 낮음
+                - **VIX 25 이상**: 🔴 공포, 변동성 확대 예상
+                """)
+                
+            except Exception as e:
+                st.error(f"분석 중 오류 발생: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
 
