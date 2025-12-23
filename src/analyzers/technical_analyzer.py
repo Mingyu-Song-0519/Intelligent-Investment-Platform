@@ -255,6 +255,109 @@ class TechnicalAnalyzer:
         return self
     
     # =========================================================================
+    # VWAP (Volume Weighted Average Price)
+    # =========================================================================
+    
+    def vwap(self) -> pd.Series:
+        """
+        Volume Weighted Average Price (VWAP) 계산
+        
+        VWAP은 기관 투자자의 평균 매입가 추정에 사용되며,
+        단기 매매의 기준선으로 활용됩니다.
+        
+        Returns:
+            VWAP 시리즈
+        """
+        typical_price = (self.df['high'] + self.df['low'] + self.df['close']) / 3
+        vwap = (typical_price * self.df['volume']).cumsum() / self.df['volume'].cumsum()
+        return vwap
+    
+    def add_vwap(self) -> 'TechnicalAnalyzer':
+        """VWAP을 DataFrame에 추가"""
+        self.df['vwap'] = self.vwap()
+        return self
+    
+    # =========================================================================
+    # OBV (On-Balance Volume)
+    # =========================================================================
+    
+    def obv(self) -> pd.Series:
+        """
+        On-Balance Volume (OBV) 계산
+        
+        OBV는 거래량 누적 지표로, 가격이 안 오르는데 수급이 쌓이는지
+        (다이버전스)를 감지하는 데 유용합니다.
+        
+        Returns:
+            OBV 시리즈
+        """
+        obv_values = [0]
+        for i in range(1, len(self.df)):
+            if self.df['close'].iloc[i] > self.df['close'].iloc[i-1]:
+                obv_values.append(obv_values[-1] + self.df['volume'].iloc[i])
+            elif self.df['close'].iloc[i] < self.df['close'].iloc[i-1]:
+                obv_values.append(obv_values[-1] - self.df['volume'].iloc[i])
+            else:
+                obv_values.append(obv_values[-1])
+        return pd.Series(obv_values, index=self.df.index)
+    
+    def add_obv(self) -> 'TechnicalAnalyzer':
+        """OBV를 DataFrame에 추가"""
+        self.df['obv'] = self.obv()
+        return self
+    
+    # =========================================================================
+    # ADX (Average Directional Index)
+    # =========================================================================
+    
+    def adx(self, period: int = 14) -> pd.Series:
+        """
+        Average Directional Index (ADX) 계산
+        
+        ADX는 추세의 강도를 측정하며 (방향이 아니라 강도),
+        0-100 범위의 값을 가집니다.
+        - 0-25: 약한 추세 또는 횡보
+        - 25-50: 강한 추세
+        - 50-100: 매우 강한 추세
+        
+        Args:
+            period: ADX 계산 기간 (기본값: 14)
+            
+        Returns:
+            ADX 시리즈
+        """
+        high = self.df['high']
+        low = self.df['low']
+        close = self.df['close']
+        
+        # +DM, -DM 계산
+        plus_dm = high.diff()
+        minus_dm = -low.diff()
+        
+        plus_dm[plus_dm < 0] = 0
+        minus_dm[minus_dm < 0] = 0
+        
+        # ATR 재사용
+        atr = self.atr(period)
+        
+        # +DI, -DI 계산
+        plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+        
+        # DX 계산
+        dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
+        
+        # ADX 계산 (DX의 이동평균)
+        adx = dx.rolling(window=period).mean()
+        
+        return adx
+    
+    def add_adx(self, period: int = 14) -> 'TechnicalAnalyzer':
+        """ADX를 DataFrame에 추가"""
+        self.df['adx'] = self.adx(period)
+        return self
+    
+    # =========================================================================
     # 통합 메서드
     # =========================================================================
     
@@ -267,6 +370,9 @@ class TechnicalAnalyzer:
             .add_bollinger_bands()
             .add_volume_indicators()
             .add_atr()
+            .add_vwap()
+            .add_obv()
+            .add_adx()
         )
     
     def get_dataframe(self) -> pd.DataFrame:
