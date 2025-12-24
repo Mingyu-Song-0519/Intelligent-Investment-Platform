@@ -70,25 +70,28 @@ def render_market_health():
         unchanged = ad_data.get("unchanged", 0)
         total = advancing + declining + unchanged
         
-        # 색상 코드
+        # 색상 코드 (글씨 색상 포함)
         if ad_ratio > 1.5:
             color = "🟢"
             status = "강세"
             bg_color = "#e8f5e9"
+            text_color = "#1b5e20"  # 진한 녹색
         elif ad_ratio > 0.8:
             color = "🟡"
             status = "중립"
             bg_color = "#fff9c4"
+            text_color = "#f57f17"  # 진한 노랑/주황
         else:
             color = "🔴"
             status = "약세"
             bg_color = "#ffebee"
+            text_color = "#c62828"  # 진한 빨강
         
         # 메트릭 표시
         st.markdown(f"""
         <div style="background-color: {bg_color}; padding: 20px; border-radius: 10px;">
-            <h2 style="text-align: center;">{color} {status}</h2>
-            <p style="text-align: center; font-size: 24px; font-weight: bold;">
+            <h2 style="text-align: center; color: {text_color};">{color} {status}</h2>
+            <p style="text-align: center; font-size: 24px; font-weight: bold; color: {text_color};">
                 A/D Ratio: {ad_ratio:.2f}
             </p>
             <p style="text-align: center; color: #666;">
@@ -129,23 +132,29 @@ def render_volatility_stress():
         else:
             regime = "알 수 없음"
         
-        # 색상 코드
+        # 색상 코드 (글씨 색상 포함)
         if "저변동성" in regime:
             color = "🟢"
             bg_color = "#e8f5e9"
+            text_color = "#1b5e20"  # 진한 녹색
         elif "중간" in regime or "중변동성" in regime:
             color = "🟡"
             bg_color = "#fff9c4"
+            text_color = "#f57f17"  # 진한 노랑/주황
         else:
             color = "🔴"
             bg_color = "#ffebee"
+            text_color = "#c62828"  # 진한 빨강
+        
+        # VIX 값 포맷팅
+        vix_display = f"{vix:.2f}" if vix is not None else "N/A"
         
         # 메트릭
         st.markdown(f"""
         <div style="background-color: {bg_color}; padding: 20px; border-radius: 10px;">
-            <h2 style="text-align: center;">{color} {regime}</h2>
-            <p style="text-align: center; font-size: 32px; font-weight: bold;">
-                VIX: {vix:.2f if vix else 'N/A'}
+            <h2 style="text-align: center; color: {text_color};">{color} {regime}</h2>
+            <p style="text-align: center; font-size: 32px; font-weight: bold; color: {text_color};">
+                VIX: {vix_display}
             </p>
         </div>
         """, unsafe_allow_html=True)
