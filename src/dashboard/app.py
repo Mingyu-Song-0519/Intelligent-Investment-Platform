@@ -2137,6 +2137,7 @@ def main():
     # 미국 모드에서는 실시간 시세 탭 제외
     if current_market == "US":
         tab_options = [
+            "🎯 투자 컨트롤 센터",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
             "📰 뉴스 감성 분석",
@@ -2149,6 +2150,7 @@ def main():
         default_tab = "📊 단일 종목 분석"
     else:
         tab_options = [
+            "🎯 투자 컨트롤 센터",
             "🔴 실시간 시세",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
@@ -2389,6 +2391,9 @@ def main():
     
     elif selected_tab == "🏥 시장 체력 진단":
         display_market_breadth()
+    elif selected_tab == "🎯 투자 컨트롤 센터":
+        from src.dashboard.control_center import show_control_center
+        show_control_center()
 
 
 def display_portfolio_optimization():
