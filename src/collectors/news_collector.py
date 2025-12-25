@@ -102,6 +102,7 @@ class NewsCollector:
                 }
                 response = self.session.get(url, headers=headers, timeout=10)
                 response.raise_for_status()
+                response.encoding = 'utf-8'  # 명시적 UTF-8 인코딩
 
                 soup = BeautifulSoup(response.content, 'html.parser')
 

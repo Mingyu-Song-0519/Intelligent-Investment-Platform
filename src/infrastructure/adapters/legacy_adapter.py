@@ -6,6 +6,7 @@ Legacy Adapter - Strangler Fig Pattern
 import sys
 from pathlib import Path
 from typing import List, Optional, Dict
+from datetime import datetime
 
 # 기존 코드 경로 추가
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -90,6 +91,67 @@ class LegacyCollectorAdapter(IStockRepository):
         except Exception as e:
             print(f"[ERROR] LegacyCollectorAdapter.get_stock_info: {e}")
             return None
+    
+    def save_stock_data(self, stock: StockEntity) -> bool:
+        """
+        StockEntity를 DB에 저장
+        
+        기존 StockDataCollector의 save_to_database 사용
+        """
+        try:
+            # Entity → DataFrame
+            df = stock.to_dataframe()
+            
+            if df.empty:
+                return False
+            
+            # 기존 메서드 사용
+            saved_count = self._legacy_collector.save_to_database(df, stock.ticker)
+            
+            return saved_count > 0
+            
+        except Exception as e:
+            print(f"[ERROR] LegacyCollectorAdapter.save_stock_data: {e}")
+            return False
+    
+    def load_stock_data(
+        self, 
+        ticker: str, 
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> Optional[StockEntity]:
+        """
+        DB에서 종목 데이터 로드
+        
+        기존 StockDataCollector의 get_stock_data 사용
+        """
+        try:
+            from datetime import datetime
+            
+            # 날짜를 문자열로 변환
+            start_str = start_date.strftime("%Y-%m-%d") if start_date else None
+            end_str = end_date.strftime("%Y-%m-%d") if end_date else None
+            
+            # 기존 메서드 호출
+            df = self._legacy_collector.get_stock_data(ticker, start_str, end_str)
+            
+            if df is None or df.empty:
+                return None
+            
+            # DataFrame → StockEntity
+            market = "KR" if ticker.endswith(".KS") else "US"
+            
+            return StockEntity.from_dataframe(
+                ticker=ticker,
+                df=df,
+                name=ticker.split(".")[0],
+                market=market
+            )
+            
+        except Exception as e:
+            print(f"[ERROR] LegacyCollectorAdapter.load_stock_data: {e}")
+            return None
+
 
 
 class LegacyNewsAdapter(INewsRepository):

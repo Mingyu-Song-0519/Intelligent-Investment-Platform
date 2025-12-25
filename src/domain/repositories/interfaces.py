@@ -73,6 +73,159 @@ class IStockRepository(ABC):
             }
         """
         pass
+    
+    @abstractmethod
+    def save_stock_data(self, stock: StockEntity) -> bool:
+        """
+        종목 데이터를 영속 저장소에 저장
+        
+        Args:
+            stock: 저장할 StockEntity
+            
+        Returns:
+            성공 여부
+        """
+        pass
+    
+    @abstractmethod
+    def load_stock_data(
+        self, 
+        ticker: str, 
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> Optional[StockEntity]:
+        """
+        영속 저장소에서 종목 데이터 로드
+        
+        Args:
+            ticker: 종목 코드
+            start_date: 시작일 (None이면 전체)
+            end_date: 종료일 (None이면 오늘)
+            
+        Returns:
+            StockEntity 또는 None
+        """
+        pass
+
+
+class IKISRepository(ABC):
+    """
+    한국투자증권 API Repository 인터페이스
+    
+    한국 주식 시장 전용 기능 (실시간 시세, 주문)
+    
+    구현체 예시:
+    - KISRepository: 한국투자증권 OpenAPI 사용
+    - MockKISRepository: 테스트용 Mock
+    """
+    
+    @abstractmethod
+    def authenticate(self, app_key: str, app_secret: str) -> Optional[str]:
+        """
+        OAuth 토큰 발급
+        
+        Args:
+            app_key: 앱 키
+            app_secret: 앱 시크릿
+            
+        Returns:
+            Access Token 또는 None (실패 시)
+        """
+        pass
+    
+    @abstractmethod
+    def get_realtime_price(self, ticker: str) -> Optional[Dict]:
+        """
+        실시간 시세 조회 (한국 종목 전용)
+        
+        Args:
+            ticker: 종목 코드 (예: "005930")
+            
+        Returns:
+            {
+                "price": 현재가,
+                "change": 전일대비,
+                "change_rate": 등락률,
+                "volume": 거래량,
+                "high": 고가,
+                "low": 저가,
+                "open": 시가,
+                "timestamp": 시간
+            }
+        """
+        pass
+    
+    @abstractmethod
+    def get_orderbook(self, ticker: str) -> Optional[Dict]:
+        """
+        호가 정보 조회
+        
+        Args:
+            ticker: 종목 코드
+            
+        Returns:
+            {
+                "ask": [(가격, 잔량), ...],  # 매도호가
+                "bid": [(가격, 잔량), ...],  # 매수호가
+                "timestamp": 시간
+            }
+        """
+        pass
+    
+    @abstractmethod
+    def create_order(
+        self, 
+        ticker: str, 
+        side: str,  # "BUY" or "SELL"
+        quantity: int, 
+        price: Optional[float] = None,  # None이면 시장가
+        order_type: str = "LIMIT"  # "LIMIT", "MARKET"
+    ) -> Optional[Dict]:
+        """
+        주문 생성
+        
+        Args:
+            ticker: 종목 코드
+            side: 매수/매도 ("BUY", "SELL")
+            quantity: 수량
+            price: 가격 (시장가 주문 시 None)
+            order_type: 주문 유형 ("LIMIT", "MARKET")
+            
+        Returns:
+            {
+                "order_id": 주문번호,
+                "status": 상태,
+                ...
+            } 또는 None (실패 시)
+        """
+        pass
+    
+    @abstractmethod
+    def get_balance(self) -> Optional[Dict]:
+        """
+        계좌 잔고 조회
+        
+        Returns:
+            {
+                "total_balance": 총 평가금액,
+                "cash": 예수금,
+                "holdings": [
+                    {"ticker": ..., "quantity": ..., "avg_price": ...},
+                    ...
+                ]
+            }
+        """
+        pass
+    
+    @abstractmethod
+    def is_authenticated(self) -> bool:
+        """
+        인증 상태 확인
+        
+        Returns:
+            인증 여부
+        """
+        pass
 
 
 class IPortfolioRepository(ABC):
@@ -223,3 +376,4 @@ class IIndicatorRepository(ABC):
             SignalEntity
         """
         pass
+

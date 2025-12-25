@@ -40,6 +40,16 @@ from src.dashboard.realtime_tab import display_realtime_data
 from src.analyzers.volatility_analyzer import VolatilityAnalyzer
 from src.analyzers.market_breadth import MarketBreadthAnalyzer
 from src.analyzers.fundamental_analyzer import FundamentalAnalyzer
+from src.dashboard.dependencies import yfinance_repo
+from src.services.incremental_learning_service import IncrementalLearningService
+from src.infrastructure.repositories.model_repository import ModelRepository
+
+# Phase 20: 투자 성향 분석 뷰
+try:
+    from src.dashboard.views import render_investment_profile_tab, render_ranking_tab
+    INVESTMENT_PROFILE_AVAILABLE = True
+except ImportError:
+    INVESTMENT_PROFILE_AVAILABLE = False
 
 
 def setup_page():
@@ -1023,28 +1033,34 @@ def display_ai_prediction():
     import os
     saved_models_dir = PROJECT_ROOT / "src" / "models" / "saved_models"
     use_saved_model = False
+    use_incremental = False  # 점진적 학습 플래그 초기화
     latest_model_prefix = None
     
     if saved_models_dir.exists():
         safe_ticker = ticker_code.replace(":", "").replace("/", "")
-        # 해당 종목의 파일 찾기 (예: 005930_20251221_lstm)
+        # 해당 종목의 파일 찾기 (예: 005930.KS_20251225_lstm)
         try:
             files = os.listdir(saved_models_dir)
             candidates = set()
             for f in files:
                 if f.startswith(safe_ticker) and any(x in f for x in ["_lstm", "_xgboost", "_transformer"]):
-                    # prefix 추출 (Ticker_Date)
-                    parts = f.split('_')
-                    if len(parts) >= 2:
-                        prefix = f"{parts[0]}_{parts[1]}"
-                        candidates.add(prefix)
+                    # prefix 추출: 모델 타입 전까지 (_lstm, _xgboost, _transformer 앞까지)
+                    # 예: "005930.KS_20251225_lstm.keras" → "005930.KS_20251225"
+                    for suffix in ["_lstm", "_xgboost", "_transformer"]:
+                        if suffix in f:
+                            prefix = f.split(suffix)[0]
+                            candidates.add(prefix)
+                            break
             
-            sorted_candidates = sorted(list(candidates), key=lambda x: x.split('_')[1], reverse=True)
+            # 날짜 기준으로 정렬 (최신이 앞으로)
+            sorted_candidates = sorted(list(candidates), reverse=True)
             
             if sorted_candidates:
                 latest_model_prefix = sorted_candidates[0]
-                latest_date = latest_model_prefix.split('_')[1]
-                formatted_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}"
+                # 날짜 추출: 마지막 _ 뒤의 숫자
+                parts = latest_model_prefix.split('_')
+                latest_date = parts[-1] if parts[-1].isdigit() and len(parts[-1]) == 8 else "Unknown"
+                formatted_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}" if latest_date != "Unknown" else latest_date
                 
                 st.info(f"📅 최근 학습된 모델이 있습니다 ({formatted_date})")
                 use_saved_model = st.checkbox(
@@ -1052,25 +1068,103 @@ def display_ai_prediction():
                     value=True,
                     help=f"체크하면 '{formatted_date}'에 학습된 모델을 불러와서 예측만 수행합니다. 시간이 절약됩니다."
                 )
+                
+                
+                # 점진적 학습 옵션 (저장된 모델이 있을 때만 표시)
+                if use_saved_model:
+                    # Service Layer 초기화
+                    model_repo = ModelRepository(storage_path="src/models/saved_models")
+                    incremental_service = IncrementalLearningService(model_repo)
+                    
+                    # 현재 데이터로 점진적 학습 가능 여부 확인
+                    df_check = get_cached_stock_data(ticker_code, period)
+                    if not df_check.empty:
+                        available, info = incremental_service.check_incremental_availability(
+                            ticker=ticker_code,
+                            current_data=df_check
+                        )
+                        
+                        if available and info and 'error' not in info:
+                            with st.expander("🔄 **점진적 학습 옵션**", expanded=False):
+                                st.markdown(f"""
+                                **감지된 신규 데이터**: {info['new_data_count']}일치  
+                                📅 {info['new_data_start']} ~ {info['new_data_end']}
+                                
+                                점진적 학습은 **기존 모델에 새 데이터만 추가로 학습**합니다.
+                                - ⚡ **장점**: 빠른 학습 (전체 학습의 약 1/5 시간)
+                                - 🎯 **적합**: 신규 데이터가 3일 이상일 때
+                                """)
+                                
+                                # Distribution Shift 경고
+                                if info['shift_detected']:
+                                    st.warning(f"""
+                                    ⚠️ **시장 급변 감지됨**
+                                    - KL Divergence: {info['shift_info']['kl_divergence']:.3f} (임계값: {info['shift_info']['kl_threshold']})
+                                    - 변동성 변화: {info['shift_info']['volatility_change_ratio']:.1%}
+                                    
+                                    **권장**: 전체 재학습 (점진적 학습은 성능 저하 가능)
+                                    """)
+                                    default_incremental = False
+                                else:
+                                    default_incremental = True if info['new_data_count'] >= 3 else False
+                                
+                                use_incremental = st.checkbox(
+                                    "🔄 점진적 학습 사용",
+                                    value=default_incremental,
+                                    help="체크 해제 시 전체 데이터로 처음부터 재학습합니다."
+                                )
+                                
+                                if use_incremental and info.get('new_data_count', 0) < 3:
+                                    st.caption("💡 신규 데이터가 적어 효과가 제한적일 수 있습니다.")
+                        elif info and 'error' in info:
+                            st.info(f"ℹ️ 점진적 학습 불가: {info['error']}")
+                            use_incremental = False
+                        elif info is None:
+                            # 메타데이터가 없는 구 버전 모델
+                            st.info("""
+                            ℹ️ **구 버전 모델 감지**
+                            
+                            현재 저장된 모델은 메타데이터가 없어 점진적 학습을 지원하지 않습니다.
+                            
+                            💡 **해결 방법**:
+                            - "💾 저장된 모델 불러오기" 체크를 **해제**하고
+                            - "💾 학습된 모델 저장" 체크를 **유지**한 상태에서
+                            - 한 번 전체 재학습을 진행하면, 이후부터 점진적 학습이 가능합니다.
+                            """)
+                            use_incremental = False
+                        else:
+                            # 신규 데이터가 없음
+                            st.info("ℹ️ 신규 데이터가 없습니다. 저장된 모델을 그대로 사용합니다.")
+                            use_incremental = False
+                    else:
+                        use_incremental = False
+                else:
+                    use_incremental = False
         except Exception as e:
             st.warning(f"모델 검색 중 오류: {e}")
+            use_incremental = False
 
     # Transformer 모델 및 저장 옵션
-    col_opt1, col_opt2, col_opt3 = st.columns(3)
+    st.markdown("##### ⚙️ 고급 설정")
+    col_opt1, col_opt2, col_opt3, col_opt4 = st.columns(4)
     with col_opt1:
-        use_transformer = st.checkbox("🤖 Transformer 모델 포함", value=False, 
+        use_transformer = st.checkbox("🤖 Transformer 포함", value=False, 
                                        disabled=use_saved_model,
-                                       help="새로 학습할 때 Transformer 모델을 포함할지 여부입니다.")
+                                       help="Transformer(Attention) 모델을 포함하여 예측합니다. (시간이 더 소요됨)")
     with col_opt2:
-        start_save = st.checkbox("💾 학습된 모델 저장", value=True, 
-                                 disabled=use_saved_model,
-                                 help="새로 학습한 모델을 저장합니다.")
+        use_regime = st.checkbox("🌍 시장 국면 반영", value=True,
+                                 help="현재 시장 상황(강세/약세/횡보)을 감지하고, 이에 맞춰 AI 모델 가중치를 자동으로 조절합니다.")
     with col_opt3:
         use_sentiment = st.checkbox("📰 감성 분석 포함", value=False,
-                                    help="뉴스 감성 점수를 AI 모델 입력으로 추가합니다. 예측 정확도가 향상될 수 있습니다.")
+                                    help="뉴스 감성 점수를 AI 모델 입력으로 추가합니다.")
+    with col_opt4:
+        start_save = st.checkbox("💾 학습된 모델 저장", value=True, 
+                                 disabled=use_saved_model,
+                                 help="새로 학습한 모델을 저장하여 나중에 재사용합니다.")
 
     if st.button("🚀 예측 실행", type="primary"):
-        with st.spinner("모델 학습 및 예측 중..."):
+        with st.status("🚀 AI 심층 분석 진행 중...", expanded=True) as status:
+            status.write("📊 시장 데이터 수집 중...")
             try:
                 # 데이터 수집
                 collector = StockDataCollector()
@@ -1114,42 +1208,124 @@ def display_ai_prediction():
                         st.warning("⚠️ '저장된 모델 불러오기' 체크를 해제하고 다시 시도하여 새로 학습해주세요.")
                         return
                 else:
-                    # 모델 학습 (전체 데이터의 80%)
-                    train_size = int(len(df) * 0.8)
-                    train_df = df.iloc[:train_size].copy()
+                    # 모델 학습 또는 점진적 학습
+                    if use_incremental and latest_model_prefix:
+                        # 점진적 학습 모드
+                        st.info("🔄 점진적 학습 모드: 신규 데이터로 Fine-tuning 중...")
+                        status.write(f"🔄 점진적 학습 중... (신규 데이터 {info.get('new_data_count', 'N/A')}일치)")
+                        
+                        # 기존 모델 로드
+                        load_path = saved_models_dir / latest_model_prefix
+                        ensemble.load_models(str(load_path))
+                        
+                        # 신규 데이터 추출
+                        data_end_date = pd.to_datetime(info['metadata']['data_end_date'])
+                        df['date'] = pd.to_datetime(df['date'])
+                        new_data = df[df['date'] > data_end_date].copy()
+                        old_data = df[df['date'] <= data_end_date].copy()
+                        
+                        # Replay Buffer 생성
+                        model_repo = ModelRepository(storage_path="src/models/saved_models")
+                        incremental_service = IncrementalLearningService(model_repo)
+                        replay_buffer = incremental_service.create_replay_buffer(old_data, new_data, replay_ratio=0.1)
+                        
+                        st.caption(f"📦 Replay Buffer: {len(replay_buffer)}개 데이터 샘플")
+                        
+                        # 점진적 학습
+                        ensemble.train_models(
+                            new_data,
+                            train_lstm=True,
+                            train_xgboost=True,
+                            train_transformer=use_transformer,
+                            verbose=0,
+                            incremental=True,
+                            replay_buffer=replay_buffer
+                        )
+                        
+                    else:
+                        # 전체 학습 모드 (기존 로직)
+                        train_size = int(len(df) * 0.8)
+                        train_df = df.iloc[:train_size].copy()
 
-                    model_name = "LSTM + XGBoost" + (" + Transformer" if use_transformer else "")
-                    st.info(f"새 모델 학습 중... ({model_name})")
-                    # 모델 학습
-                    ensemble.train_models(
-                        train_df, 
-                        train_lstm=True, 
-                        train_xgboost=True, 
-                        train_transformer=use_transformer,
-                        verbose=0
-                    )
+                        model_name = "LSTM + XGBoost" + (" + Transformer" if use_transformer else "")
+                        st.info(f"새 모델 학습 중... ({model_name})")
+                        status.write("📊 전체 데이터 재학습 중...")
+                        
+                        # 모델 학습
+                        ensemble.train_models(
+                            train_df, 
+                            train_lstm=True, 
+                            train_xgboost=True, 
+                            train_transformer=use_transformer,
+                            verbose=0
+                        )
                     
-                    # 모델 저장
-                    if start_save:
+                    # 모델 저장 (점진적/전체 공통)
+                    if start_save or use_incremental:
                         import os
-                        save_dir = PROJECT_ROOT / "src" / "models" / "saved_models"
+                        save_dir = (PROJECT_ROOT / "src" / "models" / "saved_models").resolve()
                         os.makedirs(save_dir, exist_ok=True)
                         
-                        # 파일명 안전하게 처리 (특수문자 제거 등)
-                        safe_ticker = ticker_code.replace(":", "").replace("/", "")
+                        # 파일명 안전하게 처리 (특수문자 제거 및 .KS 제거)
+                        safe_ticker = ticker_code.replace(":", "").replace("/", "").replace(".KS", "")
                         today = datetime.now().strftime("%Y%m%d")
                         save_path = save_dir / f"{safe_ticker}_{today}"
                         
-                        ensemble.save_models(str(save_path))
+                        # 메타데이터 생성
+                        save_metadata = {
+                            'last_train_date': datetime.now().isoformat(),
+                            'data_end_date': df['date'].max().isoformat(),
+                            'total_samples': len(df),
+                            'feature_cols': df.columns.tolist(),
+                            'ticker': ticker_code,
+                            'incremental_training': use_incremental
+                        }
+                        
+                        ensemble.save_models(str(save_path), metadata=save_metadata)
                         st.success(f"💾 모델 저장 완료: {save_path}")
 
                 # 예측
-                st.info("예측 수행 중...")
-                price_pred = ensemble.predict_price(df)
-                direction_pred = ensemble.predict_direction(df)
-
-                # 결과 표시
                 current_price = df['close'].iloc[-1]
+                
+                if use_regime:
+                    # RegimeAwarePredictor 사용
+                    from src.models.regime_predictor import RegimeAwarePredictor
+                    
+                    st.info("🌍 시장 국면 분석 및 적응형 예측 수행 중...")
+                    regime_predictor = RegimeAwarePredictor(ensemble_predictor=ensemble)
+                    
+                    # feature_cols는 1100 라인에서 받아오지 않았다면 None일 수 있음. 
+                    # create_enhanced_features 결과를 쓰려면 feature_cols 변수가 필요. 
+                    # 문맥상 feature_cols는 감성분석 할때만 생성됨.
+                    
+                    regime_result = regime_predictor.predict(df, use_regime_weights=True)
+                    
+                    # 결과 매핑
+                    predicted_price = regime_result['prediction']
+                    final_confidence = regime_result['confidence']
+                    regime_info = regime_result['regime']
+                    
+                    # 호환성 유지
+                    price_pred = {'ensemble_prediction': predicted_price, 'individual_predictions': {}}
+                    direction_pred = {
+                        'ensemble_prediction': 'up' if predicted_price and predicted_price > current_price else 'down',
+                        'confidence_score': final_confidence,
+                        'individual_predictions': {}
+                    }
+                    
+                    status.update(label="✅ 예측 완료!", state="complete", expanded=False)
+                    st.success(f"✅ 시장 국면: {regime_info.description} (신뢰도 {regime_info.confidence:.0%})")
+                    st.info(f"💡 투자 권고: {regime_result['recommendation']}")
+                    with st.expander("🔍 상세 가중치 및 설명"):
+                        st.write(f"VIX 수준: {regime_info.vix_level:.2f}")
+                        st.write(f"추세 강도: {regime_info.trend}")
+                        st.json(regime_result['model_weights'])
+                else:
+                    st.info("예측 수행 중...")
+                    price_pred = ensemble.predict_price(df)
+                    direction_pred = ensemble.predict_direction(df)
+
+                # 결과 표시 (현재가 변수는 위에서 이미 선언됨)
                 
                 # 예측 대상 날짜 계산 (마지막 데이터 날짜 + 1 영업일)
                 last_date = pd.to_datetime(df['date'].iloc[-1])
@@ -1223,12 +1399,6 @@ def display_ai_prediction():
                 import traceback
                 st.code(traceback.format_exc())
 
-
-
-            except Exception as e:
-                st.error(f"오류 발생: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
 
 
 def display_backtest():
@@ -1656,18 +1826,27 @@ def display_ai_prediction_mini(panel_id: str):
             pass
     
     # Transformer 및 저장 옵션
-    col_opt1, col_opt2 = st.columns(2)
+    # Transformer 및 저장 옵션
+    col_opt1, col_opt2, col_opt3 = st.columns(3)
     with col_opt1:
         use_transformer = st.checkbox(
-            "🤖 Transformer 포함", 
+            "🤖 Transformer", 
             value=False, 
             disabled=use_saved_model,
             key=f"ai_transformer_{panel_id}",
             help="딥러닝 Transformer 모델 포함"
         )
     with col_opt2:
+        use_regime = st.checkbox(
+            "🌍 Regime", 
+            value=True,
+            disabled=use_saved_model,
+            key=f"ai_regime_{panel_id}",
+            help="시장 국면(Regime)에 따른 가중치 조절"
+        )
+    with col_opt3:
         save_model = st.checkbox(
-            "💾 모델 저장", 
+            "💾 저장", 
             value=True, 
             disabled=use_saved_model,
             key=f"ai_save_{panel_id}",
@@ -1675,7 +1854,8 @@ def display_ai_prediction_mini(panel_id: str):
         )
     
     if st.button("🚀 예측 실행", key=f"ai_run_{panel_id}", type="primary"):
-        with st.spinner("AI 예측 중..."):
+        with st.status("🚀 AI 예측 수행 중...", expanded=True) as status:
+            status.write("🔄 데이터 분석 및 모델 로딩...")
             try:
                 from src.models.ensemble_predictor import EnsemblePredictor
                 
@@ -1690,9 +1870,23 @@ def display_ai_prediction_mini(panel_id: str):
                 analyzer.add_all_indicators()
                 df = analyzer.get_dataframe()
                 
-                # 앙상블 예측
+                # 앙상블 예측 (1차)
                 predictor = EnsemblePredictor(include_transformer=use_transformer)
                 result = predictor.train_and_predict(df, strategy=strategy)
+                
+                if use_regime:
+                    from src.models.regime_predictor import RegimeAwarePredictor
+                    regime_predictor = RegimeAwarePredictor(ensemble_predictor=predictor)
+                    regime_result = regime_predictor.predict(df, use_regime_weights=True)
+                    
+                    # 결과 갱신
+                    last_close = df['close'].iloc[-1]
+                    pred_close = regime_result['prediction']
+                    result['direction'] = "상승" if pred_close and pred_close > last_close else "하락"
+                    result['confidence'] = regime_result['confidence']
+                    result['regime'] = regime_result['regime'].description
+                else:
+                    result['regime'] = "N/A"
                 
                 # 모델 저장
                 if save_model and not use_saved_model:
@@ -1703,6 +1897,7 @@ def display_ai_prediction_mini(panel_id: str):
                         pass
                 
                 st.session_state[f'ai_result_{panel_id}'] = result
+                status.update(label="✅ 예측 완료!", state="complete", expanded=False)
                 st.success("✅ 예측 완료!")
             except Exception as e:
                 st.error(f"오류: {e}")
@@ -1714,6 +1909,8 @@ def display_ai_prediction_mini(panel_id: str):
             confidence = result.get('confidence', 0) * 100
             color = "🟢" if direction == "상승" else "🔴" if direction == "하락" else "⚪"
             st.markdown(f"### {color} 예측: **{direction}** (신뢰도: {confidence:.1f}%)")
+            if 'regime' in result and result.get('regime') != "N/A":
+                 st.caption(f"🌍 시장 국면: {result['regime']}")
 
 
 def display_backtest_mini(panel_id: str):
@@ -1868,8 +2065,31 @@ def main():
     st.title("📈 스마트 투자 분석 플랫폼")
     st.markdown("실시간 시세 · AI 예측 · 백테스팅 · 포트폴리오 최적화 · 리스크 관리 통합 플랫폼")
 
-    # 사이드바 - 시장 선택
+    # 사이드바 - 사용자 식별 + 시장 선택
     with st.sidebar:
+        # 사용자 이메일 입력 (프로필 저장용)
+        st.markdown("### 👤 사용자 식별")
+        email_input = st.text_input(
+            "이메일",
+            value=st.session_state.get('user_email', ''),
+            placeholder="example@email.com",
+            help="프로필 저장 및 불러오기에 사용됩니다",
+            key="email_input_field"
+        )
+        
+        if email_input and '@' in email_input:
+            st.session_state.user_id = email_input.lower().strip()
+            st.session_state.user_email = email_input
+            st.success(f"✅ {email_input}")
+        elif email_input:
+            st.warning("올바른 이메일 형식을 입력해주세요")
+            st.session_state.user_id = "default_user"
+        else:
+            st.session_state.user_id = "default_user"
+            st.caption("이메일을 입력하면 프로필이 저장됩니다")
+        
+        st.divider()
+        
         st.markdown("### 🌍 시장 선택")
         market = st.radio(
             "시장",
@@ -2024,9 +2244,8 @@ def main():
                 st.session_state.alert_config = {"enabled": False}
                 st.caption("알림을 활성화하면 VIX 급등, MDD 초과 등 주요 이벤트를 알려드립니다.")
         
-        # 매크로 현황 위젯
-        with st.expander("🌍 매크로 현황", expanded=False):
-            st.markdown("**주요 경제 지표**")
+        # 주요 경제 지표 위젯
+        with st.expander("🌍 주요 경제 지표", expanded=False):
             try:
                 from src.analyzers.macro_analyzer import MacroAnalyzer
                 macro = MacroAnalyzer()
@@ -2049,10 +2268,11 @@ def main():
                 st.caption(f"매크로 데이터 로딩 중... ({str(e)[:30]})")
 
     # 화면 분할 모드 토글
-    split_mode = st.toggle("🖥️ 화면 분할 모드", value=False, help="두 개의 화면을 나란히 표시합니다 (와이드 모드 권장)")
+    split_mode = st.toggle("🖥️ 화면 분할 모드", value=False, help="⚠️ 실험적 기능: 두 개의 화면을 나란히 표시합니다 (와이드 모드 권장). 일부 기능이 정상 작동하지 않을 수 있습니다.")
     
     if split_mode:
         # 분할 모드: segmented_control로 탭 선택
+        st.warning("⚠️ **실험적 기능**: 화면 분할 모드는 아직 개발 중인 기능입니다. 일부 기능이 정상 작동하지 않을 수 있습니다.")
         st.markdown("**💡 좌측/우측 패널에서 각각 다른 항목을 선택하세요. (단일 종목 분석은 양쪽 선택 가능)**")
         
         all_tabs = {
@@ -2062,7 +2282,8 @@ def main():
             "🤖 AI 예측": 4,
             "⏮️ 백테스트": 5,
             "💼 포트폴리오": 6,
-            "⚠️ 리스크": 7
+            "⚠️ 리스크": 7,
+            "👤 투자 성향": 8
         }
         tab_names = list(all_tabs.keys())
         
@@ -2122,6 +2343,11 @@ def main():
                 display_portfolio_optimization_mini(panel_id)
             elif tab_idx == 7:
                 display_risk_management_mini(panel_id)
+            elif tab_idx == 8:
+                if INVESTMENT_PROFILE_AVAILABLE:
+                    render_investment_profile_tab()
+                else:
+                    st.warning("투자 성향 모듈을 불러올 수 없습니다.")
         
         with col_left:
             render_panel("left", st.session_state.split_left_tab)
@@ -2145,7 +2371,10 @@ def main():
             "⏮️ 백테스팅",
             "💼 포트폴리오 최적화",
             "⚠️ 리스크 관리",
-            "🏥 시장 체력 진단"
+            "🏥 시장 체력 진단",
+            "🔥 Market Buzz",
+            "💎 팩터 투자",
+            "👤 투자 성향"
         ]
         default_tab = "📊 단일 종목 분석"
     else:
@@ -2159,7 +2388,10 @@ def main():
             "⏮️ 백테스팅",
             "💼 포트폴리오 최적화",
             "⚠️ 리스크 관리",
-            "🏥 시장 체력 진단"
+            "🏥 시장 체력 진단",
+            "🔥 Market Buzz",
+            "💎 팩터 투자",
+            "👤 투자 성향"
         ]
         default_tab = "📊 단일 종목 분석"
     
@@ -2252,6 +2484,8 @@ def main():
         display_realtime_data()
 
     elif selected_tab == "📊 단일 종목 분석":
+        # 사이드바 안내 메시지
+        st.info("👈 **사이드바**에서 종목을 선택하고 '데이터 조회' 버튼을 클릭하세요.")
         # 단일 종목 분석 콘텐츠
         ticker_code = st.session_state.get('tab1_ticker_code', '005930.KS')
         ticker_name = st.session_state.get('tab1_ticker_name', '삼성전자')
@@ -2372,12 +2606,14 @@ def main():
                 st.dataframe(df[['date', 'open', 'high', 'low', 'close', 'volume', 'rsi', 'macd']].tail(30))
 
     elif selected_tab == "🔀 다중 종목 비교":
+        st.info("👈 **사이드바**에서 비교할 종목들을 선택하세요.")
         display_multi_stock_comparison()
 
     elif selected_tab == "📰 뉴스 감성 분석":
         display_news_sentiment()
 
     elif selected_tab == "🤖 AI 예측":
+        st.info("👈 **사이드바**에서 예측할 종목을 선택하세요.")
         display_ai_prediction()
 
     elif selected_tab == "⏮️ 백테스팅":
@@ -2394,6 +2630,22 @@ def main():
     elif selected_tab == "🎯 투자 컨트롤 센터":
         from src.dashboard.control_center import show_control_center
         show_control_center()
+    elif selected_tab == "🔥 Market Buzz":
+        from src.dashboard.views.market_buzz_view import render_market_buzz_tab
+        render_market_buzz_tab()
+    elif selected_tab == "💎 팩터 투자":
+        display_factor_investing()
+    elif selected_tab == "👤 투자 성향":
+        if INVESTMENT_PROFILE_AVAILABLE:
+            from src.dashboard.views import render_investment_profile_tab, render_ranking_tab
+            st.subheader("👤 투자 성향 분석")
+            profile_tab, ranking_tab = st.tabs(["📊 성향 진단", "🏆 맞춤 종목 순위"])
+            with profile_tab:
+                render_investment_profile_tab()
+            with ranking_tab:
+                render_ranking_tab()
+        else:
+            st.error("투자 성향 모듈을 로드할 수 없습니다.")
 
 
 def display_portfolio_optimization():
@@ -2868,6 +3120,343 @@ def display_market_breadth():
                 st.error(f"분석 중 오류 발생: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
+
+
+def display_social_trend():
+    """
+    [DEPRECATED] 소셜 트렌드 분석 뷰 (Google Trends 기반)
+    
+    ⚠️ DEPRECATED: Phase 21에서 Market Buzz로 대체됨
+    이 함수는 더 이상 사용되지 않으며, 향후 버전에서 제거될 예정입니다.
+    새로운 기능: src.dashboard.views.market_buzz_view.render_market_buzz_tab()
+    """
+    st.warning("⚠️ 이 기능은 더 이상 사용되지 않습니다. '🔥 Market Buzz' 탭을 이용해주세요.")
+    st.subheader("📈 소셜 트렌드 분석")
+    st.markdown("Google Trends를 활용하여 종목의 검색 관심도와 밈주식 가능성을 분석합니다.")
+    
+    # 초보자 힌트
+    with st.expander("💡 소셜 트렌드 분석이란?", expanded=False):
+        st.markdown("""
+        **소셜 트렌드 분석**은 특정 종목이 얼마나 많은 관심을 받고 있는지 측정합니다.
+        
+        - **Google Trends**: 검색량 변화를 추적
+        - **밈주식 감지**: 갑작스러운 관심 폭발 감지
+        - **투자 타이밍**: 관심도 급등 시 주의 필요 (이미 늦었을 수 있음)
+        
+        ⚠️ **주의**: 관심도 급등 ≠ 매수 신호. 오히려 과열 신호일 수 있습니다.
+        """)
+    
+    # 종목 선택
+    stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
+    selected_stock = st.selectbox(
+        "분석할 종목 선택",
+        options=stock_options[:50],  # 상위 50개만
+        key="social_trend_stock"
+    )
+    
+    # 종목 코드 추출
+    stock_dict = st.session_state.get('active_stock_list', {})
+    ticker = stock_dict.get(selected_stock, "005930")
+    
+    # 분석 기간
+    period_options = {"1개월": "today 1-m", "3개월": "today 3-m", "12개월": "today 12-m"}
+    period = st.selectbox("분석 기간", list(period_options.keys()), index=1)
+    
+    if st.button("🔍 트렌드 분석 시작", type="primary"):
+        with st.spinner("Google Trends 데이터 수집 중..."):
+            try:
+                from src.services.social_trend_service import GoogleTrendsAnalyzer, SocialTrendAnalyzer
+                
+                # 종목명 추출 (괄호 앞)
+                stock_name = selected_stock.split(" (")[0] if " (" in selected_stock else selected_stock
+                
+                # Google Trends 분석
+                trends = GoogleTrendsAnalyzer()
+                timeframe = period_options[period]
+                
+                # 시장별 지역 설정
+                current_market = st.session_state.get('current_market', 'KR')
+                geo = "KR" if current_market == "KR" else "US"
+                
+                # 1차 검색: 종목명
+                trend_data = trends.get_interest_over_time(
+                    stock_name, 
+                    timeframe=timeframe,
+                    geo=geo
+                )
+                
+                # 실패 시 2차 검색: 티커
+                if trend_data.empty:
+                    ticker_clean = ticker.split('.')[0]  # .KS, .T 제거
+                    st.warning(f"'{stock_name}' 검색 결과가 없어 '{ticker_clean}'(으)로 재시도합니다.")
+                    trend_data = trends.get_interest_over_time(
+                        ticker_clean, 
+                        timeframe=timeframe, 
+                        geo=geo
+                    )
+                    stock_name = ticker_clean  # 차트 라벨 변경
+                
+                if trend_data is not None and not trend_data.empty:
+                    # 관심도 차트
+                    st.markdown("### 📊 검색 관심도 추이")
+                    
+                    import plotly.express as px
+                    fig = px.line(
+                        trend_data, 
+                        x=trend_data.index, 
+                        y=stock_name,
+                        title=f"'{stock_name}' Google 검색 관심도"
+                    )
+                    fig.update_layout(
+                        template='plotly_dark',
+                        xaxis_title="날짜",
+                        yaxis_title="관심도 (0-100)"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 통계
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        current = trend_data[stock_name].iloc[-1]
+                        avg = trend_data[stock_name].mean()
+                        st.metric(
+                            label="현재 관심도",
+                            value=f"{current:.0f}",
+                            delta=f"{current - avg:.1f} (평균 대비)"
+                        )
+                    
+                    with col2:
+                        max_interest = trend_data[stock_name].max()
+                        st.metric(
+                            label="최고 관심도",
+                            value=f"{max_interest:.0f}"
+                        )
+                    
+                    with col3:
+                        # 밈주식 경고
+                        recent_spike = current > avg * 2
+                        if recent_spike:
+                            st.metric(
+                                label="🚨 밈주식 경고",
+                                value="주의!"
+                            )
+                            st.warning("관심도가 평균의 2배 이상입니다. 과열 가능성!")
+                        else:
+                            st.metric(
+                                label="상태",
+                                value="정상"
+                            )
+                    
+                    # 소셜 트렌드 분석
+                    st.markdown("---")
+                    st.markdown("### 🎯 투자 타이밍 분석")
+                    
+                    social = SocialTrendAnalyzer()
+                    analysis = social.analyze_stock_buzz(ticker)
+                    
+                    if analysis:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("종합 점수", f"{analysis.get('buzz_score', 'N/A')}/100")
+                        with col2:
+                            sentiment = analysis.get('sentiment', 'neutral')
+                            sentiment_emoji = "🟢" if sentiment == "positive" else "🔴" if sentiment == "negative" else "🟡"
+                            st.metric("감성", f"{sentiment_emoji} {sentiment}")
+                        
+                        # 추천
+                        if analysis.get('is_meme_stock', False):
+                            st.error("🚨 **밈주식 가능성 높음!** 투기적 움직임에 주의하세요.")
+                        elif current > avg * 1.5:
+                            st.warning("⚠️ 관심도가 높습니다. 이미 상승했을 수 있으니 신중하게 접근하세요.")
+                        else:
+                            st.success("✅ 관심도가 정상 범위입니다.")
+                else:
+                    st.error("❌ Google Trends 데이터 검색 실패")
+                    st.markdown("""
+                    **데이터를 찾지 못하는 가능한 원인:**
+                    1. **API 호출 제한 (429 Error)**: 짧은 시간 내 과도한 요청 시 Google이 일시 차단할 수 있습니다.
+                    2. **데이터 부족**: 해당 키워드의 검색량이 너무 적을 수 있습니다.
+                    3. **검색어 불일치**: 종목명이 Google Trends 주제와 다를 수 있습니다.
+                    
+                    💡 **팁**: 1~2분 정도 기다렸다가 다시 시도하거나, 아래 버튼을 통해 **Google Trends 웹사이트에서 직접 확인**하실 수 있습니다.
+                    """)
+                    
+                    try:
+                        import urllib.parse
+                        encoded_term = urllib.parse.quote(stock_name)
+                        # 기본 기간: 3개월, 국가: KR
+                        url = f"https://trends.google.co.kr/trends/explore?date=today%203-m&geo=KR&q={encoded_term}"
+                        st.link_button("🌏 Google Trends 웹사이트에서 결과 보기", url, type="primary")
+                    except:
+                        pass
+                    
+            except Exception as e:
+                st.error(f"분석 중 오류 발생: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+
+
+def display_factor_investing():
+    """팩터 투자 분석 뷰 (Fama-French 5 Factor)"""
+    st.subheader("💎 팩터 투자 (Factor Investing)")
+    st.markdown("Fama-French 5팩터 모델과 저변동성 팩터를 기반으로 종목을 분석합니다.")
+    
+    # 팩터 설명
+    with st.expander("💡 팩터(Factor)란?", expanded=False):
+        st.markdown("""
+        **주식 수익률을 설명하는 공통적인 요인**입니다.
+        
+        1. **Momentum (모멘텀)**: 최근 12개월 수익률이 높은 주식 (추세 추종)
+        2. **Value (가치)**: PER, PBR이 낮은 저평가 주식
+        3. **Quality (품질)**: ROE, 이익률이 높은 우량 주식
+        4. **Size (규모)**: 시가총액이 작은 중소형주 (성장 잠재력)
+        5. **Volatility (저변동성)**: 주가 변동폭이 작은 안정적인 주식
+        """)
+    
+    current_market = st.session_state.get('current_market', 'KR')
+    market_code = "US" if current_market == "US" else "KR"
+    
+    tab1, tab2 = st.tabs(["📊 개별 종목 분석", "🔍 팩터 스크리닝"])
+    
+    with tab1:
+        st.markdown("##### 개별 종목 팩터 점수")
+        
+        stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
+        selected_stock = st.selectbox(
+            "분석할 종목 선택",
+            options=stock_options,
+            key="factor_stock_select"
+        )
+        
+        # 종목 코드 추출
+        stock_dict = st.session_state.get('active_stock_list', {})
+        if current_market == "US":
+            ticker = stock_dict.get(selected_stock, "AAPL")
+        else:
+            ticker = stock_dict.get(selected_stock, "005930") + ".KS"
+            
+        if st.button("🧬 팩터 분석 실행", key="run_factor_single", type="primary"):
+            with st.status("🧬 5팩터 분석 모델 가동 중...", expanded=True) as status:
+                status.write("📊 재무/주가 데이터 수집 중...")
+                try:
+                    from src.services.factor_analysis_service import FactorAnalyzer
+                    
+                    # Repository에서 데이터 조회 (yfinance_repo 사용)
+                    stock = yfinance_repo.get_stock_data(ticker, period="2y") # 모멘텀 위해 1년 이상 필요
+                    stock_info = yfinance_repo.get_stock_info(ticker)
+                    
+                    if not stock:
+                        st.error("데이터를 가져올 수 없습니다.")
+                        return
+                        
+                    analyzer = FactorAnalyzer(market=market_code)
+                    scores = analyzer.analyze(stock, stock_info)
+                    
+                    # 결과 시각화 (Radar Chart)
+                    st.markdown(f"### {selected_stock.split(' (')[0]} 팩터 점수: **{scores.composite:.1f}**")
+                    
+                    categories = ['Momentum', 'Value', 'Quality', 'Size', 'Volatility']
+                    values = [scores.momentum, scores.value, scores.quality, scores.size, scores.volatility]
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatterpolar(
+                        r=values,
+                        theta=categories,
+                        fill='toself',
+                        name=selected_stock
+                    ))
+                    fig.update_layout(
+                        polar=dict(
+                            radialaxis=dict(
+                                visible=True,
+                                range=[0, 100]
+                            )),
+                        showlegend=False,
+                        template="plotly_dark",
+                        title="5-Factor Radar Chart"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 세부 점수 카드
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("🚀 모멘텀", f"{scores.momentum:.0f}")
+                    c2.metric("💰 가치", f"{scores.value:.0f}")
+                    c3.metric("💎 품질", f"{scores.quality:.0f}")
+                    c4.metric("🐜 규모", f"{scores.size:.0f}")
+                    c5.metric("🛡️ 저변동성", f"{scores.volatility:.0f}")
+                    status.update(label="✅ 분석 완료!", state="complete", expanded=False)
+                    
+                except Exception as e:
+                    st.error(f"분석 중 오류 발생: {str(e)}")
+                    # import traceback
+                    # st.code(traceback.format_exc())
+
+    with tab2:
+        st.markdown("##### 팩터 기반 유망 종목 발굴")
+        st.info("상위 10개 종목을 분석하여 팩터 점수 순위를 매깁니다. (속도를 위해 샘플 종목만 분석)")
+        
+        # 샘플 종목 (속도 문제로 전체 스크리닝은 제한)
+        sample_stocks = stock_options[:20] # 상위 20개만
+        target_stocks = st.multiselect(
+            "분석 대상 종목 (최대 10개)",
+            sample_stocks,
+            default=sample_stocks[:5],
+            max_selections=10
+        )
+        
+        sort_by = st.selectbox(
+            "정렬 기준", 
+            ["composite", "momentum", "value", "quality", "size", "volatility"],
+            format_func=lambda x: {
+                "composite": "종합 점수", "momentum": "모멘텀", "value": "가치", 
+                "quality": "품질", "size": "규모", "volatility": "저변동성"
+            }[x]
+        )
+        
+        if st.button("🔍 스크리닝 실행", key="run_factor_screen", type="primary"):
+            with st.spinner(f"{len(target_stocks)}개 종목 분석 중..."):
+                try:
+                    from src.services.factor_analysis_service import FactorScreener
+                    
+                    # Repository 주입
+                    screener = FactorScreener(stock_repo=yfinance_repo, market=market_code)
+                    
+                    # Ticker 변환
+                    tickers = []
+                    name_map = {}
+                    for s in target_stocks:
+                        if current_market == "US":
+                            t = stock_dict.get(s, "AAPL")
+                        else:
+                            t = stock_dict.get(s, "005930") + ".KS"
+                        tickers.append(t)
+                        name_map[t] = s.split(" (")[0]
+                    
+                    results = screener.screen_top_stocks(tickers, top_n=len(tickers), sort_by=sort_by)
+                    
+                    # 결과 테이블
+                    data = []
+                    for r in results:
+                        data.append({
+                            "종목명": name_map.get(r.ticker, r.ticker),
+                            "종합 점수": r.composite,
+                            "모멘텀": r.momentum,
+                            "가치": r.value,
+                            "품질": r.quality,
+                            "규모": r.size,
+                            "저변동성": r.volatility
+                        })
+                    
+                    df = pd.DataFrame(data)
+                    st.dataframe(
+                        df.style.background_gradient(cmap="RdYlGn", subset=["종합 점수"]),
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                    
+                except Exception as e:
+                    st.error(f"스크리닝 오류: {str(e)}")
 
 
 if __name__ == "__main__":

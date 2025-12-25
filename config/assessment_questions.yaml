@@ -1,0 +1,290 @@
+# 투자 성향 진단 설문 문항
+# Clean Architecture: Infrastructure - Configuration
+
+questions:
+  # ===== 위험 감수 수준 (Risk Tolerance) =====
+  - id: Q001
+    category: risk_tolerance
+    text: "투자금의 30%가 손실되면 어떻게 하시겠습니까?"
+    type: scenario
+    weight: 1.5
+    options:
+      - label: "즉시 모두 매도한다"
+        score: 0
+      - label: "일부 매도 후 관망한다"
+        score: 25
+      - label: "그대로 보유한다"
+        score: 50
+      - label: "추가 매수 기회로 본다"
+        score: 100
+
+  - id: Q002
+    category: risk_tolerance
+    text: "주가가 하루 만에 5% 하락했습니다. 어떻게 하시겠습니까?"
+    type: scenario
+    weight: 1.2
+    options:
+      - label: "불안해서 잠을 이루지 못한다"
+        score: 0
+      - label: "걱정되지만 지켜본다"
+        score: 33
+      - label: "큰 관심 없이 평소처럼 지낸다"
+        score: 66
+      - label: "매수 기회를 노린다"
+        score: 100
+
+  - id: Q003
+    category: risk_tolerance
+    text: "투자에서 가장 중요하게 생각하는 것은?"
+    type: scenario
+    weight: 1.0
+    options:
+      - label: "원금 보전"
+        score: 10
+      - label: "안정적인 수익"
+        score: 35
+      - label: "적정 수익과 위험의 균형"
+        score: 55
+      - label: "높은 수익 가능성"
+        score: 100
+
+  # ===== 투자 기간 (Investment Horizon) =====
+  - id: Q004
+    category: investment_horizon
+    text: "투자 자금은 언제 필요하십니까?"
+    type: likert
+    weight: 1.0
+    options:
+      - label: "1년 이내"
+        score: 20
+      - label: "1-3년"
+        score: 40
+      - label: "3-5년"
+        score: 60
+      - label: "5-10년"
+        score: 80
+      - label: "10년 이상 (장기/노후 자금)"
+        score: 100
+
+  - id: Q005
+    category: investment_horizon
+    text: "투자 목적은 무엇입니까?"
+    type: scenario
+    weight: 1.0
+    options:
+      - label: "급전 마련 (1년 이내 사용)"
+        score: 15
+      - label: "주택 구매 자금 마련"
+        score: 40
+      - label: "자녀 교육비 마련"
+        score: 60
+      - label: "은퇴 자금 마련"
+        score: 85
+      - label: "자산 증식 (특별한 목적 없음)"
+        score: 70
+
+  # ===== 기대 수익률 (Expected Return) =====
+  - id: Q006
+    category: expected_return
+    text: "연간 목표 수익률은 얼마입니까?"
+    type: likert
+    weight: 1.0
+    options:
+      - label: "예금 금리 수준 (3-4%)"
+        score: 15
+      - label: "물가 상승률 보다 약간 높은 수준 (5-7%)"
+        score: 35
+      - label: "시장 평균 수익률 (8-12%)"
+        score: 55
+      - label: "시장 평균보다 높은 수익 (13-20%)"
+        score: 75
+      - label: "고수익 추구 (20% 이상)"
+        score: 100
+
+  # ===== 변동성 허용 (Volatility Tolerance) =====
+  - id: Q007
+    category: volatility_tolerance
+    text: "투자 기간 중 원금의 몇 % 손실까지 감당할 수 있습니까?"
+    type: likert
+    weight: 1.3
+    options:
+      - label: "손실을 감당할 수 없다 (0%)"
+        score: 0
+      - label: "10% 이하"
+        score: 25
+      - label: "10-20%"
+        score: 50
+      - label: "20-30%"
+        score: 75
+      - label: "30% 이상도 감당 가능"
+        score: 100
+
+  - id: Q008
+    category: volatility_tolerance
+    text: "변동성이 큰 종목(예: 테슬라, 비트코인 관련주)에 대한 생각은?"
+    type: scenario
+    weight: 1.0
+    options:
+      - label: "절대 투자하지 않는다"
+        score: 0
+      - label: "관심은 있지만 투자는 꺼린다"
+        score: 30
+      - label: "소액으로 경험해볼 수 있다"
+        score: 60
+      - label: "적극적으로 투자한다"
+        score: 100
+
+  # ===== 투자 경험 (Experience) =====
+  - id: Q009
+    category: experience
+    text: "주식 투자 경력은 얼마나 됩니까?"
+    type: likert
+    weight: 0.8
+    options:
+      - label: "처음 시작 (1년 미만)"
+        score: 20
+      - label: "초보 (1-3년)"
+        score: 40
+      - label: "중급 (3-5년)"
+        score: 60
+      - label: "숙련 (5-10년)"
+        score: 80
+      - label: "전문가 수준 (10년 이상)"
+        score: 100
+
+  - id: Q010
+    category: experience
+    text: "투자 가능한 금융 상품에 대한 이해도는?"
+    type: scenario
+    weight: 0.7
+    options:
+      - label: "예금만 알고 있다"
+        score: 10
+      - label: "펀드, 채권 정도 이해한다"
+        score: 35
+      - label: "주식, ETF도 잘 알고 있다"
+        score: 60
+      - label: "파생상품, 옵션도 이해한다"
+        score: 85
+      - label: "대부분의 금융상품을 잘 알고 있다"
+        score: 100
+
+  # ===== 섹터 선호도 (Sector Preference) =====
+  - id: Q011
+    category: preferred_sectors
+    text: "관심 있는 산업 분야를 선택해주세요 (복수 선택 가능)"
+    type: multi_select
+    weight: 0.8
+    options:
+      - label: "기술/IT (반도체, 소프트웨어, AI)"
+        value: "Technology"
+      - label: "헬스케어 (제약, 바이오, 의료기기)"
+        value: "Healthcare"
+      - label: "금융 (은행, 보험, 증권)"
+        value: "Financials"
+      - label: "에너지 (석유, 신재생에너지)"
+        value: "Energy"
+      - label: "소비재 (유통, 식품, 뷰티)"
+        value: "Consumer"
+      - label: "산업재 (건설, 조선, 기계)"
+        value: "Industrials"
+      - label: "통신 (통신사, 미디어)"
+        value: "Communication"
+      - label: "유틸리티 (전기, 가스, 수도)"
+        value: "Utilities"
+
+  # ===== 투자 스타일 (Investment Style) =====
+  - id: Q012
+    category: investment_style
+    text: "선호하는 투자 스타일은?"
+    type: scenario
+    weight: 1.0
+    options:
+      - label: "가치 투자 (저평가 우량주 장기 보유)"
+        score: 100
+        style: "value"
+      - label: "성장 투자 (고성장 기업 발굴)"
+        score: 100
+        style: "growth"
+      - label: "모멘텀 투자 (추세 추종, 단기 매매)"
+        score: 100
+        style: "momentum"
+      - label: "배당 투자 (안정적 배당 수익)"
+        score: 80
+        style: "value"
+      - label: "특별한 선호 없음"
+        score: 50
+        style: "balanced"
+
+  - id: Q013
+    category: investment_style
+    text: "주식을 보유하는 평균 기간은?"
+    type: likert
+    weight: 0.9
+    options:
+      - label: "당일~1주일 (단타)"
+        score: 100
+        style: "momentum"
+      - label: "1주~1개월 (스윙)"
+        score: 75
+        style: "momentum"
+      - label: "1~6개월 (중기)"
+        score: 50
+        style: "growth"
+      - label: "6개월~2년"
+        score: 30
+        style: "value"
+      - label: "2년 이상 (장기)"
+        score: 10
+        style: "value"
+
+  # ===== 정보 소스 (Information Source) =====
+  - id: Q014
+    category: information_source
+    text: "주로 참고하는 투자 정보 소스는?"
+    type: multi_select
+    weight: 0.5
+    options:
+      - label: "증권사 리서치 리포트"
+        value: "research"
+      - label: "경제 뉴스/신문"
+        value: "news"
+      - label: "유튜브/SNS"
+        value: "social"
+      - label: "지인 추천"
+        value: "referral"
+      - label: "본인 분석 (재무제표, 차트)"
+        value: "self_analysis"
+
+  # ===== 심리적 요인 (Psychological Factor) =====
+  - id: Q015
+    category: psychological
+    text: "다음 중 본인과 가장 가까운 것은?"
+    type: scenario
+    weight: 0.8
+    options:
+      - label: "손실이 두려워 투자를 망설인다"
+        score: 15
+      - label: "안전한 투자를 선호하지만 기회가 오면 도전한다"
+        score: 40
+      - label: "계획적으로 투자하며 감정에 휘둘리지 않는다"
+        score: 65
+      - label: "고수익을 위해서는 높은 리스크도 감수한다"
+        score: 100
+
+# 메타데이터
+metadata:
+  version: "1.0"
+  language: "ko"
+  created_at: "2025-12-25"
+  total_questions: 15
+  categories:
+    - risk_tolerance
+    - investment_horizon
+    - expected_return
+    - volatility_tolerance
+    - experience
+    - preferred_sectors
+    - investment_style
+    - information_source
+    - psychological

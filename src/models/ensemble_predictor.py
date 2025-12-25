@@ -87,22 +87,30 @@ class EnsemblePredictor:
         train_xgboost: bool = True,
         train_transformer: bool = False,
         feature_cols: Optional[List[str]] = None,
-        verbose: int = 1
+        verbose: int = 1,
+        incremental: bool = False,
+        replay_buffer: Optional[pd.DataFrame] = None
     ) -> Dict[str, Any]:
         """
-        앙상블 모델들을 학습
+        앙상블 모델들을 학습 (점진적 학습 지원)
 
         Args:
             df: 학습 데이터프레임
             train_lstm: LSTM 모델 학습 여부
             train_xgboost: XGBoost 모델 학습 여부
+            train_transformer: Transformer 모델 학습 여부
             feature_cols: 특성 컬럼들
             verbose: 출력 레벨
+            incremental: 점진적 학습 모드
+            replay_buffer: 점진적 학습 시 과거 데이터 샘플
 
         Returns:
             학습 결과 딕셔너리
         """
         results = {}
+        
+        if incremental:
+            print("[INFO] === Incremental Learning Mode ===")
 
         # LSTM 학습
         if train_lstm:
@@ -113,10 +121,17 @@ class EnsemblePredictor:
             lstm_result = self.lstm_predictor.train(
                 df=df,
                 feature_cols=feature_cols,
-                verbose=verbose
+                verbose=verbose,
+                incremental=incremental,
+                replay_buffer=replay_buffer
             )
             results['lstm'] = lstm_result
-            print(f"[SUCCESS] LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
+            
+            if incremental and lstm_result.get('incremental'):
+                print(f"[SUCCESS] LSTM Fine-tuning 완료 - RMSE: {lstm_result['rmse']:.2f} "
+                      f"(Replay: {lstm_result.get('replay_samples', 0)}, New: {lstm_result.get('new_samples', 0)})")
+            else:
+                print(f"[SUCCESS] LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
 
         # XGBoost 학습
         if train_xgboost:
@@ -126,10 +141,17 @@ class EnsemblePredictor:
             print("[INFO] XGBoost 모델 학습 중...")
             xgb_result = self.xgboost_classifier.train(
                 df=df,
-                feature_cols=feature_cols
+                feature_cols=feature_cols,
+                incremental=incremental,
+                replay_buffer=replay_buffer
             )
             results['xgboost'] = xgb_result
-            print(f"[SUCCESS] XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
+            
+            if incremental and xgb_result.get('incremental'):
+                print(f"[SUCCESS] XGBoost Incremental 완료 - Accuracy: {xgb_result['accuracy']:.2%} "
+                      f"(Estimators: {xgb_result.get('total_estimators', 'N/A')})")
+            else:
+                print(f"[SUCCESS] XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
 
         # Transformer 학습
         if train_transformer and TRANSFORMER_AVAILABLE:
@@ -139,14 +161,14 @@ class EnsemblePredictor:
             print("[INFO] Transformer 모델 학습 중...")
             transformer_result = self.transformer_predictor.train(
                 df=df,
-                epochs=50,
+                epochs=50 if not incremental else 5,  # Incremental 시 적은 epochs
                 verbose=verbose
             )
             results['transformer'] = transformer_result
             print(f"[SUCCESS] Transformer 학습 완료 - Val Loss: {transformer_result['val_loss']:.4f}")
 
-        # 스태킹 전략인 경우 메타 모델 학습
-        if self.strategy == 'stacking' and train_lstm and train_xgboost:
+        # 스태킹 전략인 경우 메타 모델 학습 (점진적 학습 시 스킵)
+        if self.strategy == 'stacking' and train_lstm and train_xgboost and not incremental:
             print("[INFO] 메타 모델 학습 중...")
             self._train_meta_models(df, feature_cols)
             print("[SUCCESS] 메타 모델 학습 완료")
@@ -504,13 +526,13 @@ class EnsemblePredictor:
             'recent_confidence': confidences[-5:] if len(confidences) >= 5 else confidences
         }
 
-    def save_models(self, prefix: str = 'ensemble'):
-        """앙상블 모델들 저장"""
+    def save_models(self, prefix: str = 'ensemble', metadata: Optional[Dict[str, Any]] = None):
+        """앙상블 모델들 저장 (메타데이터 포함)"""
         if self.lstm_predictor and self.lstm_predictor.model:
-            self.lstm_predictor.save(f"{prefix}_lstm")
+            self.lstm_predictor.save(f"{prefix}_lstm", metadata=metadata)
 
         if self.xgboost_classifier and self.xgboost_classifier.model:
-            self.xgboost_classifier.save(f"{prefix}_xgboost")
+            self.xgboost_classifier.save(f"{prefix}_xgboost", metadata=metadata)
 
         if self.transformer_predictor and self.transformer_predictor.model:
             self.transformer_predictor.save_model(f"{prefix}_transformer.keras")

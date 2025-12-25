@@ -1,13 +1,11 @@
-오류 발생: name 'TEXTBLOB_AVAILABLE' is not defined
+D:\Stock\src\dashboard\app.py:30: DeprecationWarning: src.analyzers 패키지는 Deprecated 되었습니다. 대신 src.services를 사용하세요.
+  from src.analyzers.technical_analyzer import TechnicalAnalyzer
+[INFO] 005930.KS: 242개 데이터 수집 완료
+2025-12-25 10:39:47.362 Please replace `use_container_width` with `width`.
 
-Traceback (most recent call last):
-  File "D:\Stock\src\dashboard\app.py", line 665, in display_news_sentiment
-    score, details = sentiment_analyzer.analyze_text(text)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\Stock\src\analyzers\sentiment_analyzer.py", line 57, in analyze_text
-    score = self.analyze_sentiment(text)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\Stock\src\analyzers\sentiment_analyzer.py", line 111, in analyze_sentiment
-    if TEXTBLOB_AVAILABLE:
-       ^^^^^^^^^^^^^^^^^^
-NameError: name 'TEXTBLOB_AVAILABLE' is not defined
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+WARNING:tensorflow:From D:\Stock\venv_tf\Lib\site-packages\keras\src\backend\common\global_state.py:82: The name tf.reset_default_graph is deprecated. Please use tf.compat.v1.reset_default_graph instead.
+
+WARNING:tensorflow:From D:\Stock\venv_tf\Lib\site-packages\keras\src\backend\common\global_state.py:82: The name tf.reset_default_graph is deprecated. Please use tf.compat.v1.reset_default_graph instead.

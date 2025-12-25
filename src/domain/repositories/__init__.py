@@ -3,12 +3,14 @@ from src.domain.repositories.interfaces import (
     IStockRepository,
     IPortfolioRepository,
     INewsRepository,
-    IIndicatorRepository
+    IIndicatorRepository,
+    IKISRepository
 )
 
 __all__ = [
     "IStockRepository",
     "IPortfolioRepository", 
     "INewsRepository",
-    "IIndicatorRepository"
+    "IIndicatorRepository",
+    "IKISRepository"
 ]

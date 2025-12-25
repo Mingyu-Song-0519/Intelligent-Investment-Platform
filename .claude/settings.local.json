@@ -8,7 +8,14 @@
       "Bash(more:*)",
       "Bash($env:PYTHONIOENCODING=\"utf-8\")",
       "Bash(python -X utf8:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python verify_phase10.py:*)",
+      "Bash(python verify_phase12.py:*)",
+      "Bash(python:*)",
+      "Bash(findstr:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ntest: Phase 9-13 통합 검증 시스템 구축 \\(100% 통과\\)\n\nLevel 2: Integration Verification \\(통합 검증\\)\n- Repository ↔ Service 통합 \\(20개 테스트, 100% 통과\\)\n- Phase 간 통합 \\(Legacy ↔ Clean, Factor ↔ Dashboard, Social ↔ Alert\\)\n- E2E 워크플로우 \\(초보자 포트폴리오 생성 시나리오\\)\n\nLevel 3: Architecture Compliance \\(아키텍처 준수\\)\n- Layer 분리 검증 \\(Domain/Application/Infrastructure\\) \\(20개 테스트, 100% 통과\\)\n- DIP \\(Dependency Inversion Principle\\) 준수\n- Repository Pattern 구현 확인\n- Service Layer DI 검증\n- Strangler Fig Pattern \\(Legacy + Clean 공존\\)\n- 순환 의존성 검증 \\(Domain Layer 완전 독립\\)\n\n검증 결과 요약\n- 총 125개 테스트 \\(Phase 9-13 Unit + Integration + Architecture\\)\n- 100% 통과율\n- Clean Architecture 완벽 준수\n- 프로덕션 배포 가능 상태\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)"
     ]
   }
 }

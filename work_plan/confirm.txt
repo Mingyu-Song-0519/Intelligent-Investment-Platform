@@ -1,18 +1,25 @@
-✅ Phase 2 해외 주식 고급 기능 완료!
+Phase 21.5: App.py Integration
+Successfully integrated Market Buzz view into 
+app.py
+. Replaced tab names in both US and KR modes ("📈 소셜 트렌드" → "🔥 Market Buzz"), replaced tab handler with 
+render_market_buzz_tab()
+ import. Now deprecating old function and completing Phase 21.5.
 
-기능	상태	설명
-AI 예측 모델 범용화	✅	이미 지원됨 (ticker 기반 분리 저장)
-다중 시장 포트폴리오	✅	이미 지원됨 (current_market 분기 적용)
-환율 데이터 통합	✅	새로 추가! 미국 주식 선택 시 원화 환산가 표시
-새로 구현된 기능 상세:
+Files Edited
+Task
+app.py
+Progress Updates
+1
+Integrating Market Buzz view into app.py by replacing Social Trend tab and adding session state management
 
-get_cached_exchange_rate() - USD/KRW 환율 조회 (1시간 캐싱)
-get_cached_stock_listing() - 종목 리스트 캐싱 (24시간)
-환율 UI - 미국 주식 분석 시 현재 환율 + 원화 환산가 자동 표시
-기존 탭 검증 결과:
+2
+Updating tab list and deprecating old display_social_trend function
 
-모든 탭(AI 예측, 백테스트, 포트폴리오, 리스크)이 이미 current_market 분기 로직을 갖추고 있어 미국 종목을 정상 지원합니다.
-해외 주식 기능 확장 완료! 🎉
+3
+Marking display_social_trend as deprecated and updating task checklist
 
-Phase 1 (기본 기능): ✅ 완료
-Phase 2 (고급 기능): ✅ 완료
+✅ Phase 21.5 완료: app.py 통합 성공!
+완료된 작업
+탭 이름 변경: "📈 소셜 트렌드" → "🔥 Market Buzz" (US/KR 모두)
+탭 핸들러 교체: display_social_trend() → render_market_buzz_tab() import
+기존 함수 Deprecated 처리: display_social_trend()에 경고 메시지 추가

@@ -192,8 +192,11 @@ class LSTMPredictor:
     
     def build_model(self, input_shape: Tuple[int, int]) -> Sequential:
         """LSTM 모델 구축"""
+        from keras.layers import Input
+        
         model = Sequential([
-            LSTM(self.units[0], return_sequences=True, input_shape=input_shape),
+            Input(shape=input_shape),
+            LSTM(self.units[0], return_sequences=True),
             Dropout(self.dropout),
             LSTM(self.units[1], return_sequences=True),
             Dropout(self.dropout),
@@ -211,63 +214,135 @@ class LSTMPredictor:
         df: pd.DataFrame,
         target_col: str = 'close',
         feature_cols: Optional[list] = None,
-        verbose: int = 1
+        verbose: int = 1,
+        incremental: bool = False,
+        replay_buffer: Optional[pd.DataFrame] = None
     ) -> Dict[str, Any]:
         """
-        모델 학습
+        모델 학습 (점진적 학습 지원)
         
         Args:
             df: 학습 데이터
             target_col: 예측 대상 컬럼
             feature_cols: 특성 컬럼들
             verbose: 출력 레벨
+            incremental: 점진적 학습 모드 (기존 모델에 추가 학습)
+            replay_buffer: 점진적 학습 시 과거 데이터 샘플
             
         Returns:
             학습 결과 딕셔너리
         """
-        # 데이터 준비
-        X_train, X_test, y_train, y_test = self.preprocessor.prepare_lstm_data(
-            df, target_col, feature_cols
-        )
+        if incremental and self.model is not None:
+            # 점진적 학습 모드: Fine-tuning
+            if verbose:
+                print("[INFO] Incremental Learning Mode: Fine-tuning existing model")
+            
+            # 신규 데이터 준비
+            X_new, _, y_new, _ = self.preprocessor.prepare_lstm_data(
+                df, target_col, feature_cols
+            )
+            
+            # Replay Buffer 결합
+            if replay_buffer is not None and len(replay_buffer) > 0:
+                X_replay, _, y_replay, _ = self.preprocessor.prepare_lstm_data(
+                    replay_buffer, target_col, feature_cols
+                )
+                # Replay → 신규 순서로 결합
+                X_train = np.concatenate([X_replay, X_new], axis=0)
+                y_train = np.concatenate([y_replay, y_new], axis=0)
+            else:
+                X_train = X_new
+                y_train = y_new
+            
+            # 낮은 학습률로 재컴파일 (Fine-tuning)
+            from tensorflow.keras.optimizers import Adam
+            self.model.compile(
+                optimizer=Adam(learning_rate=0.0001),  # 기존의 1/10
+                loss='mse'
+            )
+            
+            # 적은 에폭으로 학습
+            callbacks = [
+                EarlyStopping(
+                    monitor='loss',
+                    patience=3,
+                    restore_best_weights=True
+                ),
+            ]
+            
+            history = self.model.fit(
+                X_train, y_train,
+                epochs=5,  # 적은 에폭
+                batch_size=self.batch_size,
+                callbacks=callbacks,
+                verbose=verbose
+            )
+            
+            # 평가 (신규 데이터로)
+            y_pred = self.model.predict(X_new, verbose=0)
+            y_test_actual = self.preprocessor.inverse_transform(y_new)
+            y_pred_actual = self.preprocessor.inverse_transform(y_pred.flatten())
+            rmse = np.sqrt(mean_squared_error(y_test_actual, y_pred_actual))
+            
+            return {
+                'history': history.history,
+                'rmse': rmse,
+                'y_test': y_test_actual,
+                'y_pred': y_pred_actual,
+                'incremental': True,
+                'replay_samples': len(X_replay) if replay_buffer is not None else 0,
+                'new_samples': len(X_new)
+            }
         
-        # 모델 구축
-        input_shape = (X_train.shape[1], X_train.shape[2])
-        self.model = self.build_model(input_shape)
-        
-        # 콜백 설정
-        callbacks = [
-            EarlyStopping(
-                monitor='val_loss', 
-                patience=10, 
-                restore_best_weights=True
-            ),
-        ]
-        
-        # 학습
-        history = self.model.fit(
-            X_train, y_train,
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            validation_data=(X_test, y_test),
-            callbacks=callbacks,
-            verbose=verbose
-        )
-        
-        # 평가
-        y_pred = self.model.predict(X_test, verbose=0)
-        
-        # 스케일 복원
-        y_test_actual = self.preprocessor.inverse_transform(y_test)
-        y_pred_actual = self.preprocessor.inverse_transform(y_pred.flatten())
-        
-        rmse = np.sqrt(mean_squared_error(y_test_actual, y_pred_actual))
-        
-        return {
-            'history': history.history,
-            'rmse': rmse,
-            'y_test': y_test_actual,
-            'y_pred': y_pred_actual
-        }
+        else:
+            # 전체 학습 모드 (기존 로직)
+            if verbose and incremental:
+                print("[WARNING] No existing model found. Performing full training.")
+            
+            # 데이터 준비
+            X_train, X_test, y_train, y_test = self.preprocessor.prepare_lstm_data(
+                df, target_col, feature_cols
+            )
+            
+            # 모델 구축
+            input_shape = (X_train.shape[1], X_train.shape[2])
+            self.model = self.build_model(input_shape)
+            
+            # 콜백 설정
+            callbacks = [
+                EarlyStopping(
+                    monitor='val_loss', 
+                    patience=10, 
+                    restore_best_weights=True
+                ),
+            ]
+            
+            # 학습
+            history = self.model.fit(
+                X_train, y_train,
+                epochs=self.epochs,
+                batch_size=self.batch_size,
+                validation_data=(X_test, y_test),
+                callbacks=callbacks,
+                verbose=verbose
+            )
+            
+            # 평가
+            y_pred = self.model.predict(X_test, verbose=0)
+            
+            # 스케일 복원
+            y_test_actual = self.preprocessor.inverse_transform(y_test)
+            y_pred_actual = self.preprocessor.inverse_transform(y_pred.flatten())
+            
+            rmse = np.sqrt(mean_squared_error(y_test_actual, y_pred_actual))
+            
+            return {
+                'history': history.history,
+                'rmse': rmse,
+                'y_test': y_test_actual,
+                'y_pred': y_pred_actual,
+                'incremental': False
+            }
     
     def predict(self, df: pd.DataFrame, feature_cols: Optional[list] = None) -> np.ndarray:
         """예측 수행"""
@@ -337,35 +412,58 @@ class LSTMPredictor:
         
         return self.preprocessor.inverse_transform(prediction.flatten())
     
-    def save(self, name: str = 'lstm_model'):
+    def save(self, name: str = 'lstm_model', metadata: Optional[Dict[str, Any]] = None):
         """
-        모델 저장
+        모델 저장 (메타데이터 포함)
         
         Args:
             name: 모델 파일명 또는 절대 경로
+            metadata: 저장할 메타데이터 (점진적 학습용)
         """
         if self.model is None:
             raise ValueError("저장할 모델이 없습니다.")
         
         path_obj = Path(name)
-        # 절대 경로이거나 부모 디렉토리가 존재하면 그대로 사용
-        if path_obj.is_absolute() or path_obj.parent.exists():
+        
+        # Windows 절대 경로 체크: 드라이브 문자 포함 (D:\... or D:/...)
+        name_str = str(name)
+        is_absolute_path = path_obj.is_absolute() or (len(name_str) > 2 and name_str[1] == ':')
+        
+        # DEBUG
+        print(f"[DEBUG] LSTM save - name: {name}")
+        print(f"[DEBUG] LSTM save - name_str[1]: {name_str[1] if len(name_str) > 1 else 'N/A'}")
+        print(f"[DEBUG] LSTM save - is_absolute_path: {is_absolute_path}")
+        print(f"[DEBUG] LSTM save - path_obj.is_absolute(): {path_obj.is_absolute()}")
+        
+        if is_absolute_path:
+            # 절대 경로: 그대로 사용
             model_path = path_obj.with_suffix('.keras')
             scaler_path = path_obj.parent / f"{path_obj.stem}_scaler.pkl"
             feature_path = path_obj.parent / f"{path_obj.stem}_features.pkl"
-            # 디렉토리가 없으면 생성
             model_path.parent.mkdir(parents=True, exist_ok=True)
         else:
+            # 상대 경로: MODELS_DIR 사용
             model_path = MODELS_DIR / f"{name}.keras"
             scaler_path = MODELS_DIR / f"{name}_scaler.pkl"
             feature_path = MODELS_DIR / f"{name}_features.pkl"
             MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        print(f"[DEBUG] LSTM save - model_path: {model_path}")
         
         self.model.save(model_path)
         with open(scaler_path, 'wb') as f:
             pickle.dump(self.preprocessor.scaler, f)
         with open(feature_path, 'wb') as f:
             pickle.dump(self.preprocessor.feature_columns, f)
+        
+        # 메타데이터 저장
+        if metadata is not None:
+            import json
+            # 모델 파일과 같은 디렉토리에 저장
+            metadata_path = model_path.parent / f"{model_path.stem}_metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] 메타데이터 저장 완료: {metadata_path}")
         
         print(f"[INFO] 모델 저장 완료: {model_path}")
     
@@ -492,7 +590,6 @@ class XGBoostClassifier:
             max_depth=config['max_depth'],
             learning_rate=config['learning_rate'],
             objective=config['objective'],
-            use_label_encoder=False,
             eval_metric='logloss'
         )
         self.preprocessor = DataPreprocessor()
@@ -500,32 +597,82 @@ class XGBoostClassifier:
     def train(
         self, 
         df: pd.DataFrame,
-        feature_cols: Optional[list] = None
+        feature_cols: Optional[list] = None,
+        incremental: bool = False,
+        replay_buffer: Optional[pd.DataFrame] = None
     ) -> Dict[str, Any]:
         """
-        모델 학습
+        모델 학습 (점진적 학습 지원)
+        
+        Args:
+            df: 학습 데이터
+            feature_cols: 특성 컬럼들
+            incremental: 점진적 학습 모드
+            replay_buffer: 점진적 학습 시 과거 데이터 샘플
         
         Returns:
             학습 결과 딕셔너리
         """
-        X_train, X_test, y_train, y_test = self.preprocessor.prepare_classification_data(
-            df, feature_cols
-        )
+        if incremental and hasattr(self, 'model') and self.model is not None:
+            # 점진적 학습 모드
+            print("[INFO] XGBoost Incremental Learning Mode")
+            
+            # 신규 데이터 준비
+            X_new, _, y_new, _ = self.preprocessor.prepare_classification_data(df, feature_cols)
+            
+            # Replay Buffer 결합
+            if replay_buffer is not None and len(replay_buffer) > 0:
+                X_replay, _, y_replay, _ = self.preprocessor.prepare_classification_data(
+                    replay_buffer, feature_cols
+                )
+                X_train = np.concatenate([X_replay, X_new], axis=0)
+                y_train = np.concatenate([y_replay, y_new], axis=0)
+            else:
+                X_train = X_new
+                y_train = y_new
+            
+            # XGBoost sklearn API는 직접 incremental 미지원
+            # 기존 모델의 n_estimators에 추가로 학습
+            current_n_estimators = self.model.n_estimators
+            self.model.n_estimators = current_n_estimators + 10  # 10개 트리 추가
+            
+            # warm_start를 지원하지 않으므로 재학습
+            # (실전에서는 xgb.train API 사용 권장)
+            self.model.fit(X_train, y_train)
+            
+            # 평가
+            y_pred = self.model.predict(X_new)
+            accuracy = accuracy_score(y_new, y_pred)
+            
+            return {
+                'accuracy': accuracy,
+                'incremental': True,
+                'replay_samples': len(X_replay) if replay_buffer is not None else 0,
+                'new_samples': len(X_new),
+                'total_estimators': self.model.n_estimators
+            }
         
-        self.model.fit(X_train, y_train)
-        
-        y_pred = self.model.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred, output_dict=True)
-        
-        return {
-            'accuracy': accuracy,
-            'report': report,
-            'feature_importance': dict(zip(
-                self.preprocessor.feature_columns,
-                self.model.feature_importances_
-            ))
-        }
+        else:
+            # 전체 학습 모드
+            X_train, X_test, y_train, y_test = self.preprocessor.prepare_classification_data(
+                df, feature_cols
+            )
+            
+            self.model.fit(X_train, y_train)
+            
+            y_pred = self.model.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            report = classification_report(y_test, y_pred, output_dict=True)
+            
+            return {
+                'accuracy': accuracy,
+                'report': report,
+                'feature_importance': dict(zip(
+                    self.preprocessor.feature_columns,
+                    self.model.feature_importances_
+                )),
+                'incremental': False
+            }
     
     def predict(self, df: pd.DataFrame) -> Tuple[int, float]:
         """
@@ -545,15 +692,18 @@ class XGBoostClassifier:
         
         return prediction, probability[prediction]
     
-    def save(self, name: str = 'xgboost_model'):
-        """모델 저장"""
+    def save(self, name: str = 'xgboost_model', metadata: Optional[Dict[str, Any]] = None):
+        """모델 저장 (메타데이터 포함)"""
         path_obj = Path(name)
-        # 절대 경로이거나 부모 디렉토리가 존재하면 그대로 사용
-        if path_obj.is_absolute() or path_obj.parent.exists():
+        
+        # Windows 절대 경로 체크: 드라이브 문자 포함 (D:\... or D:/...)
+        name_str = str(name)
+        is_absolute_path = path_obj.is_absolute() or (len(name_str) > 2 and name_str[1] == ':')
+        
+        if is_absolute_path:
             model_path = path_obj.with_suffix('.pkl')
             scaler_path = path_obj.parent / f"{path_obj.stem}_scaler.pkl"
             feature_path = path_obj.parent / f"{path_obj.stem}_features.pkl"
-            # 디렉토리가 없으면 생성
             model_path.parent.mkdir(parents=True, exist_ok=True)
         else:
             model_path = MODELS_DIR / f"{name}.pkl"
@@ -567,6 +717,14 @@ class XGBoostClassifier:
             pickle.dump(self.preprocessor.scaler, f)
         with open(feature_path, 'wb') as f:
             pickle.dump(self.preprocessor.feature_columns, f)
+        
+        # 메타데이터 저장
+        if metadata is not None:
+            import json
+            # 모델 파일과 같은 디렉토리에 저장
+            metadata_path = model_path.parent / f"{model_path.stem}_metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
         
         print(f"[INFO] 모델 저장 완료: {model_path}")
 
