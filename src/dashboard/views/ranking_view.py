@@ -159,12 +159,36 @@ def _show_ranking_table(
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ 관심 종목 추가", key=f"accept_{stock.ticker}", use_container_width=True):
+                    # 1. 추천 수락 처리 (기존)
                     recs = service.get_user_recommendations(user_id)
                     for rec in recs:
                         if rec.ticker == stock.ticker:
                             service.process_feedback(user_id, rec.recommendation_id, "accept")
-                            st.success(f"{stock.stock_name}을(를) 관심 종목에 추가했습니다!")
                             break
+                    
+                    # 2. Watchlist에 실제 추가 (NEW)
+                    try:
+                        from src.services.watchlist_service import WatchlistService
+                        from src.infrastructure.repositories.watchlist_repository import SQLiteWatchlistRepository
+                        
+                        watchlist_service = WatchlistService(
+                            watchlist_repo=SQLiteWatchlistRepository()
+                        )
+                        
+                        # 시장 판별
+                        market = "US" if not stock.ticker.endswith(".KS") and not stock.ticker.endswith(".KQ") else "KR"
+                        
+                        watchlist_service.add_to_watchlist(
+                            user_id=user_id,
+                            ticker=stock.ticker,
+                            stock_name=stock.stock_name,
+                            market=market
+                        )
+                        st.success(f"✅ {stock.stock_name}을(를) 관심 종목에 추가했습니다!")
+                    except ValueError as e:
+                        st.info(str(e))  # 이미 존재하는 경우
+                    except Exception as e:
+                        st.warning(f"관심 종목 추가 실패: {e}")
             
             with col2:
                 if st.button("❌ 관심 없음", key=f"reject_{stock.ticker}", use_container_width=True):

@@ -2366,6 +2366,7 @@ def main():
             "🎯 투자 컨트롤 센터",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
+            "⭐ 관심 종목",
             "📰 뉴스 감성 분석",
             "🤖 AI 예측",
             "⏮️ 백테스팅",
@@ -2383,6 +2384,7 @@ def main():
             "🔴 실시간 시세",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
+            "⭐ 관심 종목",
             "📰 뉴스 감성 분석",
             "🤖 AI 예측",
             "⏮️ 백테스팅",
@@ -2630,6 +2632,9 @@ def main():
     elif selected_tab == "🎯 투자 컨트롤 센터":
         from src.dashboard.control_center import show_control_center
         show_control_center()
+    elif selected_tab == "⭐ 관심 종목":
+        from src.dashboard.views.watchlist_view import render_watchlist_tab
+        render_watchlist_tab()
     elif selected_tab == "🔥 Market Buzz":
         from src.dashboard.views.market_buzz_view import render_market_buzz_tab
         render_market_buzz_tab()
