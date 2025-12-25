@@ -51,6 +51,13 @@ try:
 except ImportError:
     INVESTMENT_PROFILE_AVAILABLE = False
 
+# Phase A: AI 분석 뷰
+try:
+    from src.dashboard.views.ai_analysis_view import render_ai_analysis_button
+    AI_ANALYSIS_AVAILABLE = True
+except ImportError:
+    AI_ANALYSIS_AVAILABLE = False
+
 
 def setup_page():
     """페이지 기본 설정"""
@@ -2537,6 +2544,16 @@ def main():
             fig = create_candlestick_chart(df, ticker_name)
             st.plotly_chart(fig, use_container_width=True)
             display_signals(df)
+            
+            # AI 분석 버튼 (Phase A)
+            st.divider()
+            with st.expander("🤖 AI 투자 분석", expanded=False):
+                st.markdown("**Gemini AI가 종목을 분석합니다.**")
+                if AI_ANALYSIS_AVAILABLE:
+                    user_id = st.session_state.get('user_id', 'default_user')
+                    render_ai_analysis_button(ticker_code, ticker_name, user_id)
+                else:
+                    st.warning("AI 분석 모듈을 불러올 수 없습니다.")
             
             # 펀더멘털 카드 (기업 가치 분석)
             st.divider()
