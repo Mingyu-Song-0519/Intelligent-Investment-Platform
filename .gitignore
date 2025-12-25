@@ -4,6 +4,9 @@
 __pycache__/
 *.db
 *.log
+token.json
+*_token.json
+secrets.json
 
 # IDE
 .vscode/
