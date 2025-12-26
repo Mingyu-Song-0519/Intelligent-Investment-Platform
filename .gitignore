@@ -118,5 +118,5 @@ coverage/
 htmlcov/
 .coverage
 
-# Work plan (개발 문서, 선택적)
-# work_plan/
+# Work plan (개발 문서)
+work_plan/

@@ -263,7 +263,7 @@ class ScreenerService:
         stocks: List[Dict[str, Any]],
         user_id: str
     ) -> List[StockRecommendation]:
-        """AI 점수 계산"""
+        """AI 점수 계산 (다중 요소 기반)"""
         recommendations = []
         
         for stock_data in stocks:
@@ -282,11 +282,63 @@ class ScreenerService:
                     signal_type = signal.signal_type.value
                     confidence = signal.confidence
                 else:
-                    # 폴백: RSI 기반 간단한 점수
+                    # 개선된 폴백: 다중 요소 기반 점수 계산
                     rsi = stock_data.get('rsi', 50)
-                    ai_score = 100 - rsi if rsi else 50
-                    signal_type = "매수" if ai_score > 60 else "보유"
-                    confidence = ai_score
+                    pbr = stock_data.get('pbr', 1.0)
+                    change_pct = stock_data.get('change_pct', 0)
+                    institution_streak = stock_data.get('institution_streak', False)
+                    
+                    # 1. RSI 점수 (0-35: 최고점, 35-50: 감소)
+                    if rsi and rsi < 35:
+                        rsi_score = 40  # 과매도 최고점
+                    elif rsi and rsi < 40:
+                        rsi_score = 30 + (40 - rsi)  # 30-35
+                    elif rsi:
+                        rsi_score = max(0, 30 - (rsi - 40) * 0.5)  # 점진 감소
+                    else:
+                        rsi_score = 15
+                    
+                    # 2. PBR 점수 (저PBR 선호)
+                    if pbr and pbr < 0.8:
+                        pbr_score = 25
+                    elif pbr and pbr < 1.0:
+                        pbr_score = 20
+                    elif pbr and pbr < 1.5:
+                        pbr_score = 15
+                    else:
+                        pbr_score = 5
+                    
+                    # 3. 모멘텀 점수 (당일 상승률)
+                    if change_pct > 3:
+                        momentum_score = 20
+                    elif change_pct > 1:
+                        momentum_score = 15
+                    elif change_pct > 0:
+                        momentum_score = 10
+                    elif change_pct > -1:
+                        momentum_score = 5
+                    else:
+                        momentum_score = 0
+                    
+                    # 4. 기관 수급 보너스
+                    institution_score = 15 if institution_streak else 0
+                    
+                    # 종합 점수 (0-100)
+                    ai_score = min(100, rsi_score + pbr_score + momentum_score + institution_score)
+                    
+                    # 신뢰도 (점수 기반 + 변동)
+                    import random
+                    confidence = min(95, max(40, ai_score + random.randint(-5, 10)))
+                    
+                    # 신호 타입 결정
+                    if ai_score >= 70:
+                        signal_type = "강력 매수"
+                    elif ai_score >= 55:
+                        signal_type = "매수"
+                    elif ai_score >= 40:
+                        signal_type = "보유"
+                    else:
+                        signal_type = "관망"
                 
                 # 추천 이유 생성
                 reason = self._generate_reason(stock_data, signal_type)

@@ -264,63 +264,12 @@ def render_sidebar_chat():
     else:
         st.sidebar.info("🔄 MockLLM 사용 중 (테스트 모드)")
     
-    # 0-2. API 키 설정 UI (Gemini가 사용 불가능할 때만 표시)
+    # 0-2. API 키 설정 안내 (중앙화된 설정으로 리다이렉트)
+    # Phase 5: 중복 제거 - 중앙 설정으로 안내
     temp_client = GeminiClient(api_key=st.session_state.get('gemini_api_key'))
     
     if not temp_client.is_available():
-        with st.sidebar.expander("⚙️ API 키 설정", expanded=True):
-            st.warning("⚠️ **보안 주의**: 개인 사용만 권장")
-            st.caption("🔐 API 키는 브라우저 세션에만 저장됩니다 (임시)")
-            
-            api_key_input = st.text_input(
-                "API Key",
-                type="password",
-                value=st.session_state.get('gemini_api_key', ''),
-                key="api_key_input",
-                placeholder="AIzaSy...",
-                help="Google AI Studio에서 발급받은 API 키"
-            )
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("적용 및 테스트", type="primary", use_container_width=True, key="apply_api_key"):
-                    if not api_key_input or len(api_key_input) < 10:
-                        st.error("❌ 유효하지 않은 API 키")
-                    else:
-                        with st.spinner("연결 테스트 중..."):
-                            success, message = _test_api_key(api_key_input)
-                            
-                        if success:
-                            st.session_state.gemini_api_key = api_key_input
-                            st.success(f"✅ {message}")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {message}")
-                            st.caption("API 키를 확인하세요")
-            
-            with col2:
-                if st.button("초기화", use_container_width=True):
-                    if 'gemini_api_key' in st.session_state:
-                        del st.session_state.gemini_api_key
-                    st.info("🔄 MockLLM 사용")
-                    st.rerun()
-            
-            st.markdown("---")
-            st.caption("💡 [API 키 발급](https://makersuite.google.com/app/apikey)")
-            
-            with st.expander("🔒 보안 권장사항"):
-                st.markdown("""
-                **배포 환경에서는 다음 방법을 권장합니다:**
-                
-                1. **Streamlit Cloud**: Settings → Secrets
-                2. **Docker**: 환경변수 (`-e GEMINI_API_KEY=...`)
-                3. **로컬 개발**: `.streamlit/secrets.toml`
-                
-                **UI 입력의 제한사항**:
-                - 브라우저 닫으면 키가 사라짐
-                - 공용 컴퓨터에서 사용 위험
-                - 개인/로컬 사용에만 적합
-                """)
+        st.sidebar.info("💡 사이드바 상단 **'🔑 AI API 설정'**에서 API 키를 입력해주세요.")
 
     # 0-3. 채팅 세션 초기화 버튼
     if st.sidebar.button("💬 대화 초기화", use_container_width=True, help="대화 기록을 지우고 서비스를 재시작합니다"):

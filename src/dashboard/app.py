@@ -2169,6 +2169,66 @@ def main():
         
         st.divider()
         
+        # Phase 1: 중앙화된 Gemini API 키 입력 (AI 기능 통합용)
+        with st.expander("🔑 AI API 설정", expanded=False):
+            try:
+                from src.services.api_key_service import APIKeyService
+                from src.infrastructure.repositories.session_api_key_repository import SessionAPIKeyRepository
+                
+                repo = SessionAPIKeyRepository()
+                api_service = APIKeyService(repository=repo)
+                
+                current_key = st.session_state.get('gemini_api_key', '')
+                
+                if current_key:
+                    st.success("✅ Gemini API 키 설정됨")
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        if st.button("🔄 검증", key="validate_api_key", use_container_width=True):
+                            is_valid, msg = repo.validate_key('gemini_api_key', current_key)
+                            if is_valid:
+                                st.success(msg)
+                            else:
+                                st.error(msg)
+                    with col2:
+                        if st.button("🗑️", key="clear_api_key", use_container_width=True, help="API 키 삭제"):
+                            api_service.delete_gemini_key()
+                            st.rerun()
+                else:
+                    st.info("💡 AI 챗봇, Gemini 감성분석 등에 필요합니다")
+                    api_key_input = st.text_input(
+                        "Gemini API Key",
+                        type="password",
+                        placeholder="AIza...",
+                        help="Google AI Studio에서 발급받은 API 키",
+                        key="central_api_key_input"
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        validate_on_save = st.checkbox("저장 시 검증", value=True, key="validate_on_save")
+                    
+                    if st.button("💾 저장", key="save_api_key", use_container_width=True):
+                        if api_key_input:
+                            success, msg = api_service.set_gemini_key(
+                                st.session_state.get('user_id', 'default_user'),
+                                api_key_input,
+                                validate=validate_on_save
+                            )
+                            if success:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        else:
+                            st.warning("API 키를 입력해주세요")
+                    
+                    st.caption("[🔗 API 키 발급받기](https://aistudio.google.com/apikey)")
+            except Exception as e:
+                st.error(f"API 설정 로드 실패: {e}")
+        
+        st.divider()
+        
         st.markdown("### 🌍 시장 선택")
         market = st.radio(
             "시장",
@@ -2488,14 +2548,21 @@ def main():
         pending = st.session_state.pending_tab
         if pending in tab_options:
             default_tab = pending
+            st.session_state.active_tab_name = pending  # 탭 상태 갱신
         del st.session_state.pending_tab
+    else:
+        # 기존 탭 상태 유지 (버튼 클릭 시에도 탭 유지)
+        saved_tab = st.session_state.get('active_tab_name')
+        if saved_tab and saved_tab in tab_options:
+            default_tab = saved_tab
     
     selected_tab = st.segmented_control(
         "분석 메뉴",
         tab_options,
         default=default_tab,
         selection_mode="single",
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="main_tab_selector"  # 고유 key로 상태 유지
     )
 
     
