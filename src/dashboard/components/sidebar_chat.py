@@ -262,7 +262,7 @@ def render_sidebar_chat():
     if current_client.is_available():
         st.sidebar.success("✅ Gemini API 연결됨")
     else:
-        st.sidebar.info("🔄 MockLLM 사용 중 (테스트 모드)")
+        st.sidebar.info("💡 위 설정 탭에서 Gemini API 키를 입력하면 AI 챗봇이 활성화됩니다.")
     
     # 0-2. API 키 설정 UI (Gemini가 사용 불가능할 때만 표시)
     temp_client = GeminiClient(api_key=st.session_state.get('gemini_api_key'))

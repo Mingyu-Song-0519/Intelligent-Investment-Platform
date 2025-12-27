@@ -43,3 +43,4 @@ torch
 
 # Phase 4 - Real-time Data
 websockets>=12.0
+
