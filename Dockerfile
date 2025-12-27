@@ -8,6 +8,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -25,16 +26,16 @@ COPY . .
 # Streamlit 설정 파일 생성
 RUN mkdir -p ~/.streamlit
 RUN echo '\
-[server]\n\
-port = 8080\n\
-address = "0.0.0.0"\n\
-headless = true\n\
-enableCORS = false\n\
-enableXsrfProtection = false\n\
-\n\
-[browser]\n\
-gatherUsageStats = false\n\
-' > ~/.streamlit/config.toml
+    [server]\n\
+    port = 8080\n\
+    address = "0.0.0.0"\n\
+    headless = true\n\
+    enableCORS = false\n\
+    enableXsrfProtection = false\n\
+    \n\
+    [browser]\n\
+    gatherUsageStats = false\n\
+    ' > ~/.streamlit/config.toml
 
 # Cloud Run에서 사용하는 포트
 EXPOSE 8080
