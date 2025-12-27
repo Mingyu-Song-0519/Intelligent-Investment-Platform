@@ -1,5 +1,5 @@
 # 🚀 Intelligent Investment Platform
-# 스마트 투자 분석 플랫폼 v3.0
+# 스마트 투자 분석 플랫폼 v3.1
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-red.svg)](https://streamlit.io)
