@@ -1,0 +1,65 @@
+# .dockerignore for Intelligent Investment Platform
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis
+.pytest_cache
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Development files
+*.md
+!README.md
+docs/
+tests/
+work_plan/
+*.txt
+!requirements.txt
+
+# Data cache (will be regenerated)
+src/cache/
+*.db
+*.sqlite
+
+# Model files (if too large)
+src/models/saved_models/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+nul
