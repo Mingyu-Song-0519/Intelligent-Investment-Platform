@@ -136,8 +136,8 @@
 ### 설치
 ```bash
 # 저장소 클론
-git clone https://github.com/Mingyu-Song-0519/myeeeeeng.git
-cd myeeeeeng
+git clone https://github.com/Mingyu-Song-0519/Intelligent-Investment-Platform.git
+cd Intelligent-Investment-Platform
 
 # 의존성 설치
 pip install -r requirements.txt
@@ -177,56 +177,39 @@ python -m streamlit run src/dashboard/app.py
 Intelligent-Investment-Platform/
 ├── 📁 src/
 │   ├── 📁 domain/                    # 도메인 계층
-│   │   ├── 📁 chat/                  # 🆕 채팅 도메인
+│   │   ├── 📁 chat/                  # 채팅 도메인
 │   │   │   ├── entities.py           # ChatMessage, ChatSession
 │   │   │   └── actions.py            # UIAction, Agentic Control
-│   │   ├── 📁 market_data/           # 🆕 시장 데이터 도메인
-│   │   │   └── interfaces.py         # IStockDataGateway, OHLCV
-│   │   ├── 📁 prediction/            # 🆕 예측 도메인
-│   │   │   └── value_objects.py      # TechnicalFeatures
+│   │   ├── 📁 market_data/           # 시장 데이터 도메인
+│   │   ├── 📁 prediction/            # 예측 도메인
 │   │   ├── 📁 investment_profile/    # 투자 성향 도메인
 │   │   └── 📁 market_buzz/           # Market Buzz 도메인
 │   │
 │   ├── 📁 infrastructure/            # 인프라 계층
-│   │   ├── 📁 external/              # 외부 API
-│   │   │   ├── gemini_client.py      # 🆕 Gemini LLM 클라이언트
-│   │   │   └── pykrx_gateway.py      # KRX 데이터 게이트웨이
-│   │   ├── 📁 market_data/           # 🆕 시장 데이터 게이트웨이
-│   │   │   ├── yahoo_gateway.py      # Yahoo Finance
-│   │   │   ├── pykrx_gateway.py      # PyKRX
-│   │   │   └── fallback_gateway.py   # Fallback 체인
-│   │   ├── 📁 sentiment/             # 🆕 감성 분석
-│   │   │   └── llm_sentiment_analyzer.py  # Gemini 감성 분석
+│   │   ├── 📁 external/              # 외부 API (Gemini, pykrx)
+│   │   ├── 📁 market_data/           # 시장 데이터 게이트웨이
+│   │   ├── 📁 sentiment/             # 감성 분석 (LLM)
 │   │   └── 📁 repositories/          # 저장소 구현체
-│   │       ├── chat_history_repository.py  # 🆕 대화 이력
-│   │       └── market_data_cache_repository.py  # 🆕 데이터 캐시
 │   │
 │   ├── 📁 services/                  # 애플리케이션 계층
-│   │   ├── 📁 chat/                  # 🆕 채팅 서비스
-│   │   │   ├── chat_service.py       # 채팅 오케스트레이션
-│   │   │   ├── context_assembler.py  # 컨텍스트 조립
-│   │   │   └── action_executor.py    # Agentic Action 실행
-│   │   ├── market_data_service.py    # 🆕 시장 데이터 서비스
-│   │   ├── feature_engineering_service.py  # 🆕 피처 엔지니어링
-│   │   ├── screener_service.py       # AI 스크리너
-│   │   └── ...
+│   │   ├── 📁 chat/                  # 채팅 서비스
+│   │   ├── market_data_service.py    # 시장 데이터 서비스
+│   │   ├── feature_engineering_service.py  # 피처 엔지니어링
+│   │   └── screener_service.py       # AI 스크리너
 │   │
 │   ├── 📁 dashboard/                 # 프레젠테이션 계층
 │   │   ├── app.py                    # 메인 앱
-│   │   ├── 📁 components/            # 🆕 UI 컴포넌트
-│   │   │   └── sidebar_chat.py       # 사이드바 챗봇
-│   │   └── views/                    # UI 뷰
+│   │   ├── 📁 components/            # UI 컴포넌트 (sidebar_chat.py)
+│   │   └── 📁 views/                 # UI 뷰
 │   │
-│   ├── 📁 models/                    # AI 모델
-│   │   ├── ensemble_predictor.py     # 앙상블 모델 (auto_adjust_weights 🆕)
-│   │   └── saved_models/             # 학습된 모델
-│   │
-│   └── 📁 analyzers/                 # 분석 모듈
-│       ├── sentiment_analyzer.py     # 감성 분석 (LLM 지원 🆕)
-│       └── technical_analyzer.py     # 기술적 분석
+│   ├── 📁 models/                    # AI 모델 (LSTM, XGBoost, Transformer)
+│   ├── 📁 analyzers/                 # 분석 모듈 (감성/기술적 분석)
+│   ├── 📁 backtest/                  # 백테스팅 모듈
+│   ├── 📁 collectors/                # 데이터 수집 모듈
+│   ├── 📁 optimizers/                # 포트폴리오 최적화
+│   └── 📁 utils/                     # 유틸리티
 │
 ├── 📁 tests/                         # 테스트
-│   └── integration/                  # 통합 테스트
 ├── 📄 requirements.txt               # 의존성
 ├── 📄 config.py                      # 설정
 └── 📄 README.md

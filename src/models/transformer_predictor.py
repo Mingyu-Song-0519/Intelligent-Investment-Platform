@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class TransformerBlock(layers.Layer):
     """Transformer 블록 (Multi-Head Attention + Feed Forward)"""
     
-    def __init__(self, embed_dim: int, num_heads: int, ff_dim: int, dropout_rate: float = 0.1):
-        super().__init__()
+    def __init__(self, embed_dim: int, num_heads: int, ff_dim: int, dropout_rate: float = 0.1, **kwargs):
+        super().__init__(**kwargs)  # name, trainable, dtype 등 전달
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.ff_dim = ff_dim
@@ -61,8 +61,8 @@ class TransformerBlock(layers.Layer):
 class PositionalEncoding(layers.Layer):
     """시계열 데이터를 위한 Positional Encoding"""
     
-    def __init__(self, max_len: int = 100, embed_dim: int = 64):
-        super().__init__()
+    def __init__(self, max_len: int = 100, embed_dim: int = 64, **kwargs):
+        super().__init__(**kwargs)  # name, trainable, dtype 등 전달
         self.max_len = max_len
         self.embed_dim = embed_dim
         

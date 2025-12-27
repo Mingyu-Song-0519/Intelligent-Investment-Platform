@@ -59,6 +59,30 @@ class LLMSentimentAnalyzer:
 
 JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.
 """
+
+    # 배치 분석용 프롬프트 (여러 텍스트를 한 번에 분석)
+    BATCH_SENTIMENT_PROMPT_TEMPLATE = """
+다음 {count}개 금융 뉴스 헤드라인의 감성을 각각 분석하세요:
+
+{news_list}
+
+분석 기준:
+- 주가/기업에 미치는 영향을 기준으로 평가
+- 긍정(-1.0~1.0): 실적 호조, 수주 증가, 목표가 상향
+- 부정: 실적 부진, 소송, 규제, 하락 전망
+
+반드시 아래 JSON 배열 형식으로만 응답하세요:
+[
+  {{"id": 1, "score": 0.5, "confidence": 0.8}},
+  {{"id": 2, "score": -0.3, "confidence": 0.7}},
+  ...
+]
+
+- id는 뉴스 번호 (1부터 시작)
+- score는 -1.0~1.0 범위
+- confidence는 0~1.0 범위
+- JSON 배열만 응답하세요. 다른 텍스트 없이.
+"""
     
     def __init__(self, llm_client: ILLMClient):
         """
@@ -93,21 +117,32 @@ JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.
             logger.error(f"[LLMSentiment] Analysis failed: {e}")
             raise
     
-    def analyze_batch(self, texts: list) -> list:
+    def analyze_batch(self, texts: list, delay_seconds: float = 1.0) -> list:
         """
-        배치 감성 분석 (Rate Limiting 주의)
+        배치 감성 분석 (Rate Limiting 적용)
         
         Args:
             texts: 분석할 텍스트 리스트
+            delay_seconds: API 호출 간 딜레이 (기본 1초)
             
         Returns:
             SentimentResult 리스트
+            
+        Note:
+            Gemini Free Tier는 분당 15회 제한이 있으므로 딜레이 필수
         """
+        import time
+        
         results = []
-        for text in texts:
+        for i, text in enumerate(texts):
             try:
                 result = self.analyze(text)
                 results.append(result)
+                
+                # Rate Limiting: 마지막이 아니면 딜레이
+                if i < len(texts) - 1:
+                    time.sleep(delay_seconds)
+                    
             except Exception as e:
                 logger.warning(f"[LLMSentiment] Batch item failed: {e}")
                 results.append(SentimentResult(score=0.0, confidence=0.0, source='error'))
@@ -147,6 +182,101 @@ JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"[LLMSentiment] Parse failed: {e}, response: {response[:100]}")
             return SentimentResult(score=0.0, confidence=0.0, source='llm_parse_error')
+
+    def analyze_batch_single_call(self, texts: list, batch_size: int = 10) -> list:
+        """
+        여러 텍스트를 단일 API 호출로 분석 (효율적)
+        
+        Args:
+            texts: 분석할 텍스트 리스트
+            batch_size: 한 번의 API 호출당 분석할 텍스트 수 (기본 10)
+            
+        Returns:
+            SentimentResult 리스트
+            
+        Note:
+            30개 뉴스를 분석할 경우: 
+            - 개별 분석: 30번 API 호출
+            - 배치 분석: 3번 API 호출 (10개씩)
+        """
+        import time
+        
+        all_results = []
+        
+        # 텍스트를 batch_size 단위로 분할
+        for batch_start in range(0, len(texts), batch_size):
+            batch_texts = texts[batch_start:batch_start + batch_size]
+            
+            try:
+                # 뉴스 리스트 포맷팅
+                news_list = "\n".join([
+                    f"{i+1}. {text[:200]}"  # 각 뉴스 최대 200자
+                    for i, text in enumerate(batch_texts)
+                ])
+                
+                prompt = self.BATCH_SENTIMENT_PROMPT_TEMPLATE.format(
+                    count=len(batch_texts),
+                    news_list=news_list
+                )
+                
+                response = self.llm_client.generate(prompt)
+                batch_results = self._parse_batch_response(response, len(batch_texts))
+                all_results.extend(batch_results)
+                
+                # Rate Limiting: 배치 간 딜레이 (마지막 배치가 아닐 경우)
+                if batch_start + batch_size < len(texts):
+                    time.sleep(1.0)
+                    
+            except Exception as e:
+                logger.warning(f"[LLMSentiment] Batch single call failed: {e}")
+                # 실패 시 해당 배치는 기본값으로 채움
+                all_results.extend([
+                    SentimentResult(score=0.0, confidence=0.0, source='batch_error')
+                    for _ in batch_texts
+                ])
+        
+        return all_results
+    
+    def _parse_batch_response(self, response: str, expected_count: int) -> list:
+        """배치 응답 파싱"""
+        try:
+            # JSON 배열 추출
+            json_str = response.strip()
+            if '```' in json_str:
+                match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', json_str, re.DOTALL)
+                if match:
+                    json_str = match.group(1)
+            
+            # 배열이 아닌 경우 배열 형태 찾기
+            if not json_str.startswith('['):
+                match = re.search(r'\[.*\]', json_str, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+            
+            data = json.loads(json_str)
+            
+            results = []
+            for item in data:
+                score = float(item.get('score', 0))
+                score = max(-1.0, min(1.0, score))
+                confidence = float(item.get('confidence', 0.5))
+                confidence = max(0.0, min(1.0, confidence))
+                
+                results.append(SentimentResult(
+                    score=score,
+                    confidence=confidence,
+                    source='llm_batch'
+                ))
+            
+            # 결과 수가 부족하면 기본값으로 채움
+            while len(results) < expected_count:
+                results.append(SentimentResult(score=0.0, confidence=0.0, source='llm_batch_missing'))
+            
+            return results[:expected_count]
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"[LLMSentiment] Batch parse failed: {e}")
+            return [SentimentResult(score=0.0, confidence=0.0, source='batch_parse_error') for _ in range(expected_count)]
 
 
 class VaderSentimentAnalyzer:

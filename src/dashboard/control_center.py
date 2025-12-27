@@ -1,8 +1,8 @@
 """
 Investment Control Center - Phase 13 (수정됨)
-투자 컨트롤 센터 (통합 대시보드)
+시장 현황 (통합 대시보드)
 
-모든 분석을 한눈에: 시장 체력, 변동성, 팩터 TOP 5, 매크로 환경
+모든 분석을 한눈에: 시장 체력, 변동성, 팩터 TOP 5, 주요 경제 지표
 """
 import streamlit as st
 import plotly.graph_objects as go
@@ -14,16 +14,16 @@ from datetime import datetime
 
 def render_control_center():
     """
-    투자 컨트롤 센터 메인 뷰
+    시장 현황 메인 뷰
     
     4분할 레이아웃:
     ┌─────────────────┬─────────────────┐
     │  📊 시장 체력    │  😱 변동성      │
     ├─────────────────┼─────────────────┤
-    │  🏆 팩터 TOP 5   │  🌍 매크로 환경  │
+    │  🏆 팩터 TOP 5   │  🌍 주요 경제 지표  │
     └─────────────────┴─────────────────┘
     """
-    st.title("🎯 투자 컨트롤 센터")
+    st.title("🌐 시장 현황")
     st.markdown("---")
     
     # 4분할 레이아웃
@@ -46,7 +46,7 @@ def render_control_center():
         render_factor_top5()
     
     with col4:
-        st.subheader("🌍 매크로 환경")
+        st.subheader("🌍 주요 경제 지표")
         render_macro_summary()
 
 
@@ -257,7 +257,7 @@ def render_factor_top5():
 
 
 def render_macro_summary():
-    """매크로 환경 요약 (Phase 9-6) - 수정됨"""
+    """주요 경제 지표 요약 (Phase 9-6) - 수정됨"""
     try:
         from src.analyzers.macro_analyzer import MacroAnalyzer
         
