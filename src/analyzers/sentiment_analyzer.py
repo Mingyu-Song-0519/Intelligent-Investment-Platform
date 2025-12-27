@@ -60,14 +60,21 @@ class SentimentAnalyzer:
         if VADER_AVAILABLE:
             self.vader_analyzer = VaderAnalyzer()
         
-        # LLM 분석기 초기화 (Gemini)
+        # LLM 분석기 초기화 (Gemini) - 중앙화된 API 키 사용
         if use_llm and LLM_SENTIMENT_AVAILABLE:
             try:
-                # GeminiClient 생성하여 전달
+                # Phase F: 중앙화된 API 키 사용 (LLMClientFactory)
+                from src.infrastructure.external.llm_client_factory import LLMClientFactory
+                gemini_client = LLMClientFactory.create_gemini_client()
+                
+                # GeminiClient인지 확인 (MockLLMClient가 아닌지)
                 from src.infrastructure.external.gemini_client import GeminiClient
-                gemini_client = GeminiClient()
-                self.llm_analyzer = LLMSentimentAnalyzer(llm_client=gemini_client)
-                print("[INFO] Gemini LLM 감성 분석기 초기화 완료")
+                if isinstance(gemini_client, GeminiClient) and gemini_client.is_available():
+                    self.llm_analyzer = LLMSentimentAnalyzer(llm_client=gemini_client)
+                    print("[INFO] Gemini LLM 감성 분석기 초기화 완료")
+                else:
+                    print("[WARNING] Gemini API 키가 설정되지 않았습니다. 사이드바 '🔑 AI API 설정'에서 입력해주세요.")
+                    self.use_llm = False
             except Exception as e:
                 print(f"[WARNING] LLM 분석기 초기화 실패: {e}. 기본 분석 사용.")
                 self.use_llm = False
@@ -114,10 +121,11 @@ class SentimentAnalyzer:
         
         try:
             result = self.llm_analyzer.analyze(text)
+            # SentimentResult 속성: score, confidence, source, keywords
             return result.score, {
-                'label': result.label,
+                'keywords': result.keywords,
                 'confidence': result.confidence,
-                'reasoning': result.reasoning
+                'source': result.source
             }
         except Exception as e:
             print(f"[WARNING] LLM 감성 분석 실패: {e}. 기본 분석 사용.")

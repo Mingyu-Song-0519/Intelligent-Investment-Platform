@@ -256,19 +256,13 @@ def render_sidebar_chat():
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI 투자 비서")
     
-    # 0-1. 현재 API 상태 표시
+    # 0-1. 현재 API 상태 표시 (연결된 경우만)
     current_client = GeminiClient(api_key=st.session_state.get('gemini_api_key'))
     
     if current_client.is_available():
         st.sidebar.success("✅ Gemini API 연결됨")
     else:
-        st.sidebar.info("🔄 MockLLM 사용 중 (테스트 모드)")
-    
-    # 0-2. API 키 설정 안내 (중앙화된 설정으로 리다이렉트)
-    # Phase 5: 중복 제거 - 중앙 설정으로 안내
-    temp_client = GeminiClient(api_key=st.session_state.get('gemini_api_key'))
-    
-    if not temp_client.is_available():
+        # API 키 미설정 시 간단한 안내만 표시
         st.sidebar.info("💡 사이드바 상단 **'🔑 AI API 설정'**에서 API 키를 입력해주세요.")
 
     # 0-3. 채팅 세션 초기화 버튼

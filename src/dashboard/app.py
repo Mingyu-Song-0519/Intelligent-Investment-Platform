@@ -825,22 +825,30 @@ def display_news_sentiment():
             help="Google News 수집 시 사용할 키워드입니다. 네이버 금융 뉴스는 종목 코드로 자동 수집됩니다."
         )
     
-    # 딥러닝 분석 옵션 (한국어 전용)
+    # 감성 분석 방법 선택
     if current_market == 'KR':
-        use_deep_learning = st.checkbox(
-            "🧠 딥러닝 감성 분석 (KR-FinBert-SC)",
-            value=False,
-            help="GPU 활용 딥러닝 모델로 더 정확한 감성 분석을 수행합니다. 첫 실행 시 모델 다운로드가 필요합니다."
+        analysis_method = st.radio(
+            "📊 감성 분석 방법",
+            ["⚡ 키워드 기반 (빠름)", "🧠 딥러닝 (KR-FinBert-SC)", "🤖 Gemini LLM (고급)"],
+            horizontal=True,
+            help="키워드: 빠르지만 단순 / 딥러닝: GPU 활용 정확 / Gemini: API 기반 고급 분석"
         )
+        use_deep_learning = (analysis_method == "🧠 딥러닝 (KR-FinBert-SC)")
+        use_gemini_llm = (analysis_method == "🤖 Gemini LLM (고급)")
+        
+        # Gemini 선택 시 API 키 확인
+        if use_gemini_llm and not st.session_state.get('gemini_api_key'):
+            st.warning("⚠️ 사이드바 상단 '🔑 AI API 설정'에서 Gemini API 키를 먼저 입력해주세요.")
     else:
         use_deep_learning = False
+        use_gemini_llm = False
         st.info("💡 미국 종목은 VADER 기반 영문 감성 분석을 사용합니다.")
 
     if st.button("📥 뉴스 수집 및 분석", type="primary"):
         with st.spinner(f"'{search_query}' 관련 뉴스 수집 중..."):
             try:
                 news_collector = NewsCollector()
-                sentiment_analyzer = SentimentAnalyzer(use_deep_learning=use_deep_learning)
+                sentiment_analyzer = SentimentAnalyzer(use_deep_learning=use_deep_learning, use_llm=use_gemini_llm)
                 
                 if current_market == 'US':
                     # 미국 종목: Yahoo Finance + Google News (EN)
@@ -880,29 +888,61 @@ def display_news_sentiment():
                 if all_articles:
                     # 감성 점수 계산
                     if current_market == 'US':
-                        analysis_method = "VADER (영문)"
+                        analysis_method_label = "VADER (영문)"
                     elif use_deep_learning:
-                        analysis_method = "딥러닝 (KR-FinBert-SC)"
+                        analysis_method_label = "딥러닝 (KR-FinBert-SC)"
+                    elif use_gemini_llm:
+                        analysis_method_label = "🤖 Gemini LLM (배치)"
                     else:
-                        analysis_method = "키워드 기반"
+                        analysis_method_label = "키워드 기반"
                     
-                    with st.spinner(f"감성 분석 중... ({analysis_method})"):
+                    with st.spinner(f"감성 분석 중... ({analysis_method_label})"):
+                        # Gemini LLM 배치 분석 (효율적)
+                        if use_gemini_llm and sentiment_analyzer.llm_analyzer:
+                            texts = [a['title'] + ' ' + a.get('content', '')[:200] for a in all_articles]
+                            
+                            try:
+                                # 배치 분석: 10개씩 묶어서 1번의 API 호출
+                                results = sentiment_analyzer.llm_analyzer.analyze_batch_single_call(texts, batch_size=10)
+                                
+                                for idx, article in enumerate(all_articles):
+                                    if idx < len(results):
+                                        article['sentiment'] = results[idx].score
+                                        article['analysis_method'] = 'gemini_llm_batch'
+                                        article['sentiment_details'] = {
+                                            'confidence': results[idx].confidence,
+                                            'source': results[idx].source
+                                        }
+                                    else:
+                                        article['sentiment'] = 0.0
+                                        article['analysis_method'] = 'gemini_fallback'
+                            except Exception as e:
+                                st.warning(f"Gemini 배치 분석 실패: {e}. 키워드 분석으로 대체합니다.")
+                                for article in all_articles:
+                                    text = article['title'] + ' ' + article.get('content', '')
+                                    score, details = sentiment_analyzer.analyze_text(text)
+                                    article['sentiment'] = score
+                                    article['analysis_method'] = 'keyword_fallback'
+                        else:
+                            # 기존 분석 방식 (VADER / 딥러닝 / 키워드)
+                            for article in all_articles:
+                                text = article['title'] + ' ' + article.get('content', '')
+                                
+                                if current_market == 'US':
+                                    score, details = sentiment_analyzer.analyze_text_en(text)
+                                    article['analysis_method'] = 'vader_en'
+                                elif use_deep_learning:
+                                    score, details = sentiment_analyzer.analyze_text_deep(text)
+                                    article['analysis_method'] = 'deep_learning'
+                                else:
+                                    score, details = sentiment_analyzer.analyze_text(text)
+                                    article['analysis_method'] = 'keyword'
+                                
+                                article['sentiment'] = score
+                        
+                        # 감성 레이블 부여 (공통)
                         for article in all_articles:
-                            text = article['title'] + ' ' + article.get('content', '')
-                            
-                            # 시장에 따른 분석 방법 선택
-                            if current_market == 'US':
-                                score, details = sentiment_analyzer.analyze_text_en(text)
-                                article['analysis_method'] = 'vader_en'
-                            elif use_deep_learning:
-                                score, details = sentiment_analyzer.analyze_text_deep(text)
-                                article['analysis_method'] = 'deep_learning'
-                            else:
-                                score, details = sentiment_analyzer.analyze_text(text)
-                                article['analysis_method'] = 'keyword'
-                            
-                            article['sentiment'] = score
-                            
+                            score = article.get('sentiment', 0)
                             if score > 0.5:
                                 article['sentiment_label'] = 'VERY_POSITIVE'
                             elif score > 0.2:
@@ -1268,7 +1308,10 @@ def display_ai_prediction():
                             include_sentiment=True,
                             use_llm=use_llm_sentiment  # Phase F: Gemini LLM 옵션
                         )
-                        st.success(f"✅ 감성 피처 {len([c for c in feature_cols if 'sentiment' in c])}개 추가됨{llm_msg}")
+                        # 감성 피처 개수 정확히 계산
+                        from src.services.sentiment_analysis_service import SentimentAnalysisService
+                        sentiment_feature_count = len(SentimentAnalysisService.get_sentiment_feature_columns())
+                        st.success(f"✅ 감성 피처 {sentiment_feature_count}개 추가됨{llm_msg}")
                     except Exception as e:
                         st.warning(f"감성 분석 생략: {str(e)}")
 
@@ -2144,128 +2187,346 @@ def main():
     st.title("📈 스마트 투자 분석 플랫폼")
     st.markdown("실시간 시세 · AI 예측 · 백테스팅 · 포트폴리오 최적화 · 리스크 관리 통합 플랫폼")
 
-    # 사이드바 - 사용자 식별 + 시장 선택
+    # 사이드바 - 탭별 설정 최상단 + 사용자 식별 + 시장 선택 (Phase 1: 사용성 개선)
     with st.sidebar:
-        # 사용자 이메일 입력 (프로필 저장용)
-        st.markdown("### 👤 사용자 식별")
-        email_input = st.text_input(
-            "이메일",
-            value=st.session_state.get('user_email', ''),
-            placeholder="example@email.com",
-            help="프로필 저장 및 불러오기에 사용됩니다",
-            key="email_input_field"
-        )
+        # ==========================================
+        # Phase 1: 탭별 설정 - 최상단 배치 (사용 빈도 최고)
+        # ==========================================
+        # NOTE: main_tab_selector 위젯 key를 먼저 확인 (실제 사용자 선택값)
+        # active_tab_name보다 우선순위가 높음 (위젯 상태가 먼저 업데이트됨)
+        current_selected_tab = st.session_state.get('main_tab_selector', 
+                                st.session_state.get('active_tab_name', '📊 단일 종목 분석'))
+        current_market = st.session_state.get('current_market', 'KR')
         
-        if email_input and '@' in email_input:
-            st.session_state.user_id = email_input.lower().strip()
-            st.session_state.user_email = email_input
-            st.success(f"✅ {email_input}")
-        elif email_input:
-            st.warning("올바른 이메일 형식을 입력해주세요")
-            st.session_state.user_id = "default_user"
-        else:
-            st.session_state.user_id = "default_user"
-            st.caption("이메일을 입력하면 프로필이 저장됩니다")
-        
-        st.divider()
-        
-        # Phase 1: 중앙화된 Gemini API 키 입력 (AI 기능 통합용)
-        with st.expander("🔑 AI API 설정", expanded=False):
-            try:
-                from src.services.api_key_service import APIKeyService
-                from src.infrastructure.repositories.session_api_key_repository import SessionAPIKeyRepository
+        if current_selected_tab == "🔴 실시간 시세" and current_market == "KR":
+            # 실시간 시세 사이드바 (한국 모드만)
+            st.header("⚙️ 실시간 설정")
+            
+            st.success("🇰🇷 한국 시장")
+            
+            stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
+            default_idx = stock_options.index("삼성전자 (005930)") if "삼성전자 (005930)" in stock_options else 0
+            
+            selected_stock = st.selectbox(
+                "종목 검색",
+                options=stock_options,
+                index=default_idx,
+                help="종목명을 입력하여 검색하세요",
+                key="realtime_stock_select"
+            )
+            
+            ticker = st.session_state.get('active_stock_list', {}).get(selected_stock, "005930")
+            st.session_state.realtime_ticker = ticker
+            st.caption(f"종목코드: {ticker}")
+            
+            refresh_rate = st.slider("갱신 주기 (초)", 1, 10, 2, key="realtime_refresh_rate_slider")
+            st.session_state.realtime_refresh_rate = refresh_rate
+            
+            st.markdown("---")
+            if st.session_state.get('realtime_running', False):
+                st.success("🟢 실시간 조회 중...")
+                if st.button("⏹️ 중지", type="primary", key="realtime_stop_btn"):
+                    st.session_state.realtime_stop_clicked = True
+            else:
+                st.warning("🔴 조회 중지됨")
+                if st.button("▶️ 실시간 조회 시작", type="primary", key="realtime_start_btn"):
+                    st.session_state.realtime_start_clicked = True
+            
+            # divider 제거 - 불필요한 공간 절약
+                    
+        elif current_selected_tab == "📊 단일 종목 분석":
+            # 단일 종목 분석 사이드바
+            st.header("⚙️ 설정")
+            
+            market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
+            st.info(f"시장: {market_label}")
+            
+            stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
+            
+            # AI 종목 추천에서 선택한 종목이 있으면 자동 선택
+            if 'analysis_ticker' in st.session_state:
+                analysis_ticker = st.session_state['analysis_ticker']
+                # stock_options에서 해당 ticker를 포함하는 항목 찾기
+                matching_stock = None
+                for stock_option in stock_options:
+                    if f"({analysis_ticker})" in stock_option:
+                        matching_stock = stock_option
+                        break
                 
-                repo = SessionAPIKeyRepository()
-                api_service = APIKeyService(repository=repo)
-                
-                current_key = st.session_state.get('gemini_api_key', '')
-                
-                if current_key:
-                    st.success("✅ Gemini API 키 설정됨")
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        if st.button("🔄 검증", key="validate_api_key", use_container_width=True):
-                            is_valid, msg = repo.validate_key('gemini_api_key', current_key)
-                            if is_valid:
-                                st.success(msg)
-                            else:
-                                st.error(msg)
-                    with col2:
-                        if st.button("🗑️", key="clear_api_key", use_container_width=True, help="API 키 삭제"):
-                            api_service.delete_gemini_key()
-                            st.rerun()
+                if matching_stock:
+                    default_stock = matching_stock
+                    # analysis_ticker 사용 후 삭제 (한 번만 적용)
+                    del st.session_state['analysis_ticker']
                 else:
-                    st.info("💡 AI 챗봇, Gemini 감성분석 등에 필요합니다")
-                    api_key_input = st.text_input(
-                        "Gemini API Key",
-                        type="password",
-                        placeholder="AIza...",
-                        help="Google AI Studio에서 발급받은 API 키",
-                        key="central_api_key_input"
+                    default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
+            else:
+                default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
+            
+            default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
+            selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="tab1_stock")
+            
+            if current_market == "US":
+                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "AAPL")
+            else:
+                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "005930") + ".KS"
+            ticker_name = selected.split(" (")[0] if "(" in selected else selected
+            st.session_state.tab1_ticker_code = ticker_code
+            st.session_state.tab1_ticker_name = ticker_name
+            
+            period = st.selectbox(
+                "조회 기간",
+                ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"],
+                index=3,
+                format_func=lambda x: {
+                    "1mo": "1개월", "3mo": "3개월", "6mo": "6개월", "1y": "1년",
+                    "2y": "2년", "5y": "5년", "10y": "10년", "max": "전체"
+                }.get(x, x),
+                key="tab1_period"
+            )
+            
+            if st.button("📥 데이터 수집", type="primary", key="tab1_fetch"):
+                st.session_state.tab1_fetch_clicked = True
+            
+            st.caption("💡 기술적 지표는 자동으로 계산됩니다.")
+            # divider 제거 - 불필요한 공간 절약
+        else:
+            # 기타 탭 - 간단한 시장 표시만
+            market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
+            st.info(f"현재 시장: {market_label}")
+            # divider 제거 - 불필요한 공간 절약
+        
+        # ==========================================
+        # Phase 3: 설정 통합 - 하나의 Expander + Tabs
+        # ==========================================
+        with st.expander("⚙️ 설정", expanded=False):
+            tab_user, tab_api, tab_alert = st.tabs(["👤 사용자", "🔑 API", "🔔 알림"])
+            
+            # Tab 1: 사용자 식별
+            with tab_user:
+                st.markdown("**👤 사용자 식별**")
+                email_input = st.text_input(
+                    "이메일",
+                    value=st.session_state.get('user_email', ''),
+                    placeholder="example@email.com",
+                    help="프로필 저장 및 불러오기에 사용됩니다",
+                    key="email_input_field_unified"
+                )
+                
+                if email_input and '@' in email_input:
+                    st.session_state.user_id = email_input.lower().strip()
+                    st.session_state.user_email = email_input
+                    st.success(f"✅ {email_input}")
+                elif email_input:
+                    st.warning("올바른 이메일 형식을 입력해주세요")
+                    st.session_state.user_id = "default_user"
+                else:
+                    st.session_state.user_id = "default_user"
+                    st.caption("이메일을 입력하면 프로필이 저장됩니다")
+            
+            # Tab 2: AI API 설정
+            with tab_api:
+                st.markdown("**🔑 AI API 설정**")
+                try:
+                    from src.services.api_key_service import APIKeyService
+                    from src.infrastructure.repositories.session_api_key_repository import SessionAPIKeyRepository
+                    
+                    repo = SessionAPIKeyRepository()
+                    api_service = APIKeyService(repository=repo)
+                    
+                    current_key = st.session_state.get('gemini_api_key', '')
+                    
+                    if current_key:
+                        st.success("✅ Gemini API 키 설정됨")
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            if st.button("🔄 검증", key="validate_api_key_unified", use_container_width=True):
+                                is_valid, msg = repo.validate_key('gemini_api_key', current_key)
+                                if is_valid:
+                                    st.success(msg)
+                                else:
+                                    st.error(msg)
+                        with col2:
+                            if st.button("🗑️", key="clear_api_key_unified", use_container_width=True, help="API 키 삭제"):
+                                api_service.delete_gemini_key()
+                                st.rerun()
+                    else:
+                        st.info("💡 AI 챗봇, Gemini 감성분석 등에 필요합니다")
+                        api_key_input = st.text_input(
+                            "Gemini API Key",
+                            type="password",
+                            placeholder="AIza...",
+                            help="Google AI Studio에서 발급받은 API 키",
+                            key="central_api_key_input_unified"
+                        )
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            validate_on_save = st.checkbox("저장 시 검증", value=True, key="validate_on_save_unified")
+                        
+                        if st.button("💾 저장", key="save_api_key_unified", use_container_width=True):
+                            if api_key_input:
+                                success, msg = api_service.set_gemini_key(
+                                    st.session_state.get('user_id', 'default_user'),
+                                    api_key_input,
+                                    validate=validate_on_save
+                                )
+                                if success:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                            else:
+                                st.warning("API 키를 입력해주세요")
+                        
+                        st.caption("[🔗 API 키 발급받기](https://aistudio.google.com/apikey)")
+                except Exception as e:
+                    st.error(f"API 설정 로드 실패: {e}")
+            
+            # Tab 3: 알림 설정
+            with tab_alert:
+                st.markdown("**🔔 알림 설정**")
+                st.markdown("**주요 이벤트 알림 설정**")
+                
+                alert_enabled = st.checkbox("알림 활성화", value=False, key="alert_enabled_unified")
+                
+                if alert_enabled:
+                    st.markdown("---")
+                    st.markdown("**📊 임계값 설정**")
+                    
+                    vix_threshold = st.slider(
+                        "VIX 경고 임계값", 
+                        min_value=15, max_value=50, value=25,
+                        help="VIX가 이 값을 초과하면 경고 알림",
+                        key="vix_threshold_unified"
                     )
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        validate_on_save = st.checkbox("저장 시 검증", value=True, key="validate_on_save")
+                    mdd_threshold = st.slider(
+                        "MDD 경고 임계값 (%)", 
+                        min_value=5, max_value=30, value=10,
+                        help="최대 낙폭이 이 %를 초과하면 경고 알림",
+                        key="mdd_threshold_unified"
+                    )
                     
-                    if st.button("💾 저장", key="save_api_key", use_container_width=True):
-                        if api_key_input:
-                            success, msg = api_service.set_gemini_key(
-                                st.session_state.get('user_id', 'default_user'),
-                                api_key_input,
-                                validate=validate_on_save
-                            )
-                            if success:
-                                st.success(msg)
-                                st.rerun()
-                            else:
-                                st.error(msg)
-                        else:
-                            st.warning("API 키를 입력해주세요")
+                    st.session_state.alert_config = {
+                        "vix_threshold": vix_threshold,
+                        "mdd_threshold": mdd_threshold,
+                        "enabled": True
+                    }
                     
-                    st.caption("[🔗 API 키 발급받기](https://aistudio.google.com/apikey)")
-            except Exception as e:
-                st.error(f"API 설정 로드 실패: {e}")
+                    st.markdown("---")
+                    st.markdown("**📬 알림 채널**")
+                    
+                    telegram_enabled = st.checkbox("Telegram 알림", value=False, key="telegram_enabled_unified")
+                    if telegram_enabled:
+                        telegram_token = st.text_input(
+                            "Bot Token", 
+                            type="password",
+                            help="BotFather에서 발급받은 토큰",
+                            key="telegram_token_unified"
+                        )
+                        telegram_chat = st.text_input(
+                            "Chat ID",
+                            help="@userinfobot으로 확인 가능",
+                            key="telegram_chat_unified"
+                        )
+                        st.session_state.telegram_config = {
+                            "token": telegram_token,
+                            "chat_id": telegram_chat
+                        }
+                    
+                    email_alert_enabled = st.checkbox("Email 알림", value=False, key="email_alert_enabled_unified")
+                    if email_alert_enabled:
+                        st.text_input("SMTP 서버", placeholder="smtp.gmail.com", key="smtp_server_unified")
+                        st.text_input("이메일 주소", placeholder="your@email.com", key="email_addr_unified")
+                        st.text_input("앱 비밀번호", type="password", key="email_pwd_unified")
+                        st.caption("※ Gmail은 앱 비밀번호 필요")
+                else:
+                    st.session_state.alert_config = {"enabled": False}
+                    st.caption("알림을 활성화하면 VIX 급등, MDD 초과 등 주요 이벤트를 알려드립니다.")
         
-        st.divider()
-        
+        # 기존 API/사용자 식별 expander는 Phase 3에서 통합됨 (위 "⚙️ 설정" expander 참조)
+    
+    # ==========================================
+    # Phase 2: 시장 선택 토글 버튼 (공간 50% 절약)
+    # ==========================================
+    with st.sidebar:
         st.markdown("### 🌍 시장 선택")
-        market = st.radio(
-            "시장",
-            ["🇰🇷 한국 (KRX)", "🇺🇸 미국 (NYSE/NASDAQ)"],
-            horizontal=False,
-            key="market_select",
-            label_visibility="collapsed"
-        )
-        st.divider()
-    
-    # 시장 변경 감지 및 상태 저장/복원
-    previous_market = st.session_state.get('previous_market', None)
-    new_market = "US" if market == "🇺🇸 미국 (NYSE/NASDAQ)" else "KR"
-    
-    if previous_market is not None and previous_market != new_market:
-        # 이전 시장의 상태 저장 (stock_data 포함)
-        state_keys = ['stock_data', 'ticker_name', 'mini_data', 'mini_stock', 'ai_result', 'bt_result', 'port_result', 'risk_result']
-        for base_key in state_keys:
-            for panel in ['', '_left', '_right']:
-                key = f"{base_key}{panel}"
-                if key in st.session_state:
-                    st.session_state[f"{previous_market}_{key}"] = st.session_state[key]
         
-        # 새 시장의 이전 상태 복원
-        for base_key in state_keys:
-            for panel in ['', '_left', '_right']:
-                key = f"{base_key}{panel}"
-                saved_key = f"{new_market}_{key}"
-                if saved_key in st.session_state:
-                    st.session_state[key] = st.session_state[saved_key]
-                elif key in st.session_state:
-                    del st.session_state[key]
+        # 현재 시장 상태
+        current_market_state = st.session_state.get('current_market', 'KR')
+        
+        # 가로 2열 토글 버튼
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button(
+                "🇰🇷 한국",
+                use_container_width=True,
+                type="primary" if current_market_state == "KR" else "secondary",
+                key="market_btn_kr"
+            ):
+                if current_market_state != "KR":
+                    st.session_state.market_changed = True
+                    st.session_state.new_market = "KR"
+                    st.rerun()
+        
+        with col2:
+            if st.button(
+                "🇺🇸 미국",
+                use_container_width=True,
+                type="primary" if current_market_state == "US" else "secondary",
+                key="market_btn_us"
+            ):
+                if current_market_state != "US":
+                    st.session_state.market_changed = True
+                    st.session_state.new_market = "US"
+                    st.rerun()
+        
+        # 선택된 시장 캡션 표시
+        market_full_label = "🇰🇷 한국 (KRX)" if current_market_state == "KR" else "🇺🇸 미국 (NYSE/NASDAQ)"
+        st.caption(f"선택: {market_full_label}")
+        # divider 제거 - 불필요한 공간 절약
     
-    st.session_state.previous_market = new_market
+    # 시장 변경 처리 (Phase 2: 버튼 클릭 기반)
+    if st.session_state.get('market_changed', False):
+        new_market = st.session_state.new_market
+        previous_market = st.session_state.get('previous_market', None)
+        
+        if previous_market is not None and previous_market != new_market:
+            # 이전 시장의 상태 저장 (stock_data 포함)
+            state_keys = ['stock_data', 'ticker_name', 'mini_data', 'mini_stock', 'ai_result', 'bt_result', 'port_result', 'risk_result']
+            for base_key in state_keys:
+                for panel in ['', '_left', '_right']:
+                    key = f"{base_key}{panel}"
+                    if key in st.session_state:
+                        st.session_state[f"{previous_market}_{key}"] = st.session_state[key]
+            
+            # 새 시장의 이전 상태 복원
+            for base_key in state_keys:
+                for panel in ['', '_left', '_right']:
+                    key = f"{base_key}{panel}"
+                    saved_key = f"{new_market}_{key}"
+                    if saved_key in st.session_state:
+                        st.session_state[key] = st.session_state[saved_key]
+                    elif key in st.session_state:
+                        del st.session_state[key]
+        
+        # 시장 상태 업데이트
+        st.session_state.current_market = new_market
+        st.session_state.previous_market = new_market
+        st.session_state.market_changed = False
+        
+        # 초기 previous_market 설정
+        if previous_market is None:
+            st.session_state.previous_market = new_market
+    else:
+        # 기본 previous_market 초기화
+        if 'previous_market' not in st.session_state:
+            st.session_state.previous_market = current_market_state
     
     # 시장에 따른 종목 리스트 및 통화 설정
-    if market == "🇺🇸 미국 (NYSE/NASDAQ)":
+    market = st.session_state.get('current_market', 'KR')
+    if market == "US":
         st.session_state.current_market = "US"
         st.session_state.currency_symbol = "$"
         st.session_state.ticker_suffix = ""
@@ -2322,89 +2583,15 @@ def main():
         st.session_state.active_stock_list = st.session_state.krx_stock_list
         st.session_state.active_stock_names = st.session_state.krx_stock_names
 
-    # 알림 설정 섹션
+    # ==========================================
+    # Phase 3-4: 기존 알림/경제 지표 expander 제거됨
+    # - 알림 설정: 통합 설정 Expander (⚙️ 설정 → 🔔 알림 탭) 참조
+    # - 경제 지표: 시장 현황 탭에서 확인 (사이드바 중복 제거)
+    # ==========================================
     with st.sidebar:
-        with st.expander("🔔 알림 설정", expanded=False):
-            st.markdown("**주요 이벤트 알림 설정**")
-            
-            # 알림 활성화
-            alert_enabled = st.checkbox("알림 활성화", value=False, key="alert_enabled")
-            
-            if alert_enabled:
-                st.markdown("---")
-                st.markdown("**📊 임계값 설정**")
-                
-                vix_threshold = st.slider(
-                    "VIX 경고 임계값", 
-                    min_value=15, max_value=50, value=25,
-                    help="VIX가 이 값을 초과하면 경고 알림"
-                )
-                
-                mdd_threshold = st.slider(
-                    "MDD 경고 임계값 (%)", 
-                    min_value=5, max_value=30, value=10,
-                    help="최대 낙폭이 이 %를 초과하면 경고 알림"
-                )
-                
-                st.session_state.alert_config = {
-                    "vix_threshold": vix_threshold,
-                    "mdd_threshold": mdd_threshold,
-                    "enabled": True
-                }
-                
-                st.markdown("---")
-                st.markdown("**📬 알림 채널**")
-                
-                # Telegram 설정
-                telegram_enabled = st.checkbox("Telegram 알림", value=False)
-                if telegram_enabled:
-                    telegram_token = st.text_input(
-                        "Bot Token", 
-                        type="password",
-                        help="BotFather에서 발급받은 토큰"
-                    )
-                    telegram_chat = st.text_input(
-                        "Chat ID",
-                        help="@userinfobot으로 확인 가능"
-                    )
-                    st.session_state.telegram_config = {
-                        "token": telegram_token,
-                        "chat_id": telegram_chat
-                    }
-                
-                # Email 설정
-                email_enabled = st.checkbox("Email 알림", value=False)
-                if email_enabled:
-                    st.text_input("SMTP 서버", placeholder="smtp.gmail.com")
-                    st.text_input("이메일 주소", placeholder="your@email.com")
-                    st.text_input("앱 비밀번호", type="password")
-                    st.caption("※ Gmail은 앱 비밀번호 필요")
-            else:
-                st.session_state.alert_config = {"enabled": False}
-                st.caption("알림을 활성화하면 VIX 급등, MDD 초과 등 주요 이벤트를 알려드립니다.")
-        
-        # 주요 경제 지표 위젯
-        with st.expander("🌍 주요 경제 지표", expanded=False):
-            try:
-                from src.analyzers.macro_analyzer import MacroAnalyzer
-                macro = MacroAnalyzer()
-                widget_data = macro.get_sidebar_widget_data()
-                
-                if "error" not in widget_data:
-                    for key, data in widget_data.items():
-                        if data.get("value"):
-                            change = data.get("change", 0)
-                            delta_color = "normal" if change >= 0 else "inverse"
-                            st.metric(
-                                label=data["label"],
-                                value=f"{data['value']:.2f}",
-                                delta=f"{change:+.2f}%",
-                                delta_color=delta_color
-                            )
-                else:
-                    st.warning("데이터 로딩 실패")
-            except Exception as e:
-                st.caption(f"매크로 데이터 로딩 중... ({str(e)[:30]})")
+        # Phase 1: AI 챗봇 - 하단 고정 (divider 제거하여 공간 절약)
+        if CHATBOT_AVAILABLE:
+            render_sidebar_chat()
 
     # 화면 분할 모드 토글
     split_mode = st.toggle("🖥️ 화면 분할 모드", value=False, help="⚠️ 실험적 기능: 두 개의 화면을 나란히 표시합니다 (와이드 모드 권장). 일부 기능이 정상 작동하지 않을 수 있습니다.")
@@ -2507,7 +2694,7 @@ def main():
     # 미국 모드에서는 실시간 시세 탭 제외
     if current_market == "US":
         tab_options = [
-            "🎯 투자 컨트롤 센터",
+            "🌐 시장 현황",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
             "⭐ 관심 종목",
@@ -2520,12 +2707,12 @@ def main():
             "🔥 Market Buzz",
             "💎 팩터 투자",
             "👤 투자 성향",
-            "🌅 AI 스크리너"
+            "🌅 AI 종목 추천"
         ]
         default_tab = "📊 단일 종목 분석"
     else:
         tab_options = [
-            "🎯 투자 컨트롤 센터",
+            "🌐 시장 현황",
             "🔴 실시간 시세",
             "📊 단일 종목 분석",
             "🔀 다중 종목 비교",
@@ -2539,7 +2726,7 @@ def main():
             "🔥 Market Buzz",
             "💎 팩터 투자",
             "👤 투자 성향",
-            "🌅 AI 스크리너"
+            "🌅 AI 종목 추천"
         ]
         default_tab = "📊 단일 종목 분석"
     
@@ -2569,86 +2756,9 @@ def main():
     # Phase D: 챗봇 Context 추적을 위해 현재 탭 저장
     st.session_state.active_tab_name = selected_tab
     
-    # 사이드바: 현재 탭에 따라 다르게 표시
-    with st.sidebar:
-        if selected_tab == "🔴 실시간 시세" and current_market == "KR":
-            # 실시간 시세 사이드바 (한국 모드만)
-            st.header("⚙️ 실시간 설정")
-            
-            st.success("🇰🇷 한국 시장")
-            
-            stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-            default_idx = stock_options.index("삼성전자 (005930)") if "삼성전자 (005930)" in stock_options else 0
-            
-            selected_stock = st.selectbox(
-                "종목 검색",
-                options=stock_options,
-                index=default_idx,
-                help="종목명을 입력하여 검색하세요",
-                key="realtime_stock_select"
-            )
-            
-            ticker = st.session_state.get('active_stock_list', {}).get(selected_stock, "005930")
-            st.session_state.realtime_ticker = ticker
-            st.caption(f"종목코드: {ticker}")
-            
-            refresh_rate = st.slider("갱신 주기 (초)", 1, 10, 2, key="realtime_refresh_rate_slider")
-            st.session_state.realtime_refresh_rate = refresh_rate
-            
-            st.markdown("---")
-            if st.session_state.get('realtime_running', False):
-                st.success("🟢 실시간 조회 중...")
-                if st.button("⏹️ 중지", type="primary", key="realtime_stop_btn"):
-                    st.session_state.realtime_stop_clicked = True
-            else:
-                st.warning("🔴 조회 중지됨")
-                if st.button("▶️ 실시간 조회 시작", type="primary", key="realtime_start_btn"):
-                    st.session_state.realtime_start_clicked = True
-                    
-        elif selected_tab == "📊 단일 종목 분석":
-            # 단일 종목 분석 사이드바
-            st.header("⚙️ 설정")
-            
-            market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
-            st.info(f"시장: {market_label}")
-            
-            stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-            default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
-            default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
-            selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="tab1_stock")
-            
-            if current_market == "US":
-                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "AAPL")
-            else:
-                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "005930") + ".KS"
-            ticker_name = selected.split(" (")[0] if "(" in selected else selected
-            st.session_state.tab1_ticker_code = ticker_code
-            st.session_state.tab1_ticker_name = ticker_name
-            
-            period = st.selectbox(
-                "조회 기간",
-                ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"],
-                index=3,
-                format_func=lambda x: {
-                    "1mo": "1개월", "3mo": "3개월", "6mo": "6개월", "1y": "1년",
-                    "2y": "2년", "5y": "5년", "10y": "10년", "max": "전체"
-                }.get(x, x),
-                key="tab1_period"
-            )
-            # 위젯 key로 자동 저장됨, 별도 할당 불필요
-            
-            if st.button("📥 데이터 수집", type="primary", key="tab1_fetch"):
-                st.session_state.tab1_fetch_clicked = True
-            
-            st.caption("💡 기술적 지표는 자동으로 계산됩니다.")
-        else:
-            # 기타 탭 - 간단한 시장 표시만
-            market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
-            st.info(f"현재 시장: {market_label}")
-        
-        # Phase D: AI 챗봇 (모든 탭에서 항상 표시)
-        if CHATBOT_AVAILABLE:
-            render_sidebar_chat()
+    # 사이드바: 이제 Phase 1에서 탭별 설정이 최상단에 렌더링됨 (Line 2192-2300)
+    # 중복 코드 제거됨 - 기존 2차 사이드바 블록 삭제
+
     # 탭 콘텐츠 렌더링
     if selected_tab == "🔴 실시간 시세" and current_market == "KR":
         display_realtime_data()
@@ -2724,7 +2834,10 @@ def main():
                 # 초보자 힌트
                 with st.popover("💡 용어 설명"):
                     st.markdown(f"**PER**: {get_hint_text('PER', 'short')}")
+                    st.markdown(f"**PBR**: 주가순자산비율. 주가 ÷ 주당순자산. 1 미만이면 저평가 가능성.")
                     st.markdown(f"**ROE**: {get_hint_text('ROE', 'short')}")
+                    st.markdown(f"**부채비율**: 부채 ÷ 자기자본 × 100. 낮을수록 재무 안정성 높음.")
+                    st.markdown(f"**배당률**: 배당금 ÷ 주가 × 100. 높을수록 배당 매력적.")
                 
                 try:
                     fund_analyzer = FundamentalAnalyzer(ticker_code)
@@ -2744,7 +2857,8 @@ def main():
                         per_val = per_data['value']
                         st.metric(
                             label=f"{per_data['color']} PER",
-                            value=f"{per_val:.1f}" if per_val else "N/A"
+                            value=f"{per_val:.1f}" if per_val else "N/A",
+                            help="주가수익비율 (Price to Earnings Ratio). 주가 ÷ 주당순이익. 낮을수록 저평가."
                         )
                     
                     with fcol2:
@@ -2752,7 +2866,8 @@ def main():
                         pbr_val = pbr_data['value']
                         st.metric(
                             label=f"{pbr_data['color']} PBR",
-                            value=f"{pbr_val:.2f}" if pbr_val else "N/A"
+                            value=f"{pbr_val:.2f}" if pbr_val else "N/A",
+                            help="주가순자산비율 (Price to Book Ratio). 주가 ÷ 주당순자산. 1 미만이면 저평가 가능성."
                         )
                     
                     with fcol3:
@@ -2760,7 +2875,8 @@ def main():
                         roe_val = roe_data['value']
                         st.metric(
                             label=f"{roe_data['color']} ROE",
-                            value=f"{roe_val*100:.1f}%" if roe_val else "N/A"
+                            value=f"{roe_val*100:.1f}%" if roe_val else "N/A",
+                            help="자기자본이익률 (Return on Equity). 당기순이익 ÷ 자기자본 × 100. 높을수록 수익성 우수."
                         )
                     
                     with fcol4:
@@ -2768,7 +2884,8 @@ def main():
                         debt_val = debt_data['value']
                         st.metric(
                             label=f"{debt_data['color']} 부채비율",
-                            value=f"{debt_val:.0f}%" if debt_val else "N/A"
+                            value=f"{debt_val:.0f}%" if debt_val else "N/A",
+                            help="부채 ÷ 자기자본 × 100. 낮을수록 재무 안정성이 높음. 일반적으로 200% 이하가 안전."
                         )
                     
                     with fcol5:
@@ -2776,7 +2893,8 @@ def main():
                         div_val = div_data['value']
                         st.metric(
                             label=f"{div_data['color']} 배당률",
-                            value=f"{div_val*100:.2f}%" if div_val else "N/A"
+                            value=f"{div_val*100:.2f}%" if div_val else "N/A",
+                            help="배당금 ÷ 주가 × 100. 높을수록 배당 매력적. 배당을 지급하지 않는 기업은 0%."
                         )
                     
                 except Exception as e:
@@ -2807,7 +2925,7 @@ def main():
     
     elif selected_tab == "🏥 시장 체력 진단":
         display_market_breadth()
-    elif selected_tab == "🎯 투자 컨트롤 센터":
+    elif selected_tab == "🌐 시장 현황":
         from src.dashboard.control_center import show_control_center
         show_control_center()
     elif selected_tab == "⭐ 관심 종목":
@@ -2830,7 +2948,7 @@ def main():
         else:
             st.error("투자 성향 모듈을 로드할 수 없습니다.")
     
-    elif selected_tab == "🌅 AI 스크리너":
+    elif selected_tab == "🌅 AI 종목 추천":
         if SCREENER_AVAILABLE:
             render_morning_picks()
         else:

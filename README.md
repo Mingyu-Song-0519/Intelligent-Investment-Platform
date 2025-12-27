@@ -1,5 +1,5 @@
 # 🚀 Intelligent Investment Platform
-# 스마트 투자 분석 플랫폼 v3.0
+# 스마트 투자 분석 플랫폼 v3.1
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-red.svg)](https://streamlit.io)
@@ -97,6 +97,12 @@
 - RSI 과매도 + 기관 3일 연속 매수 종목 발굴
 - 투자 성향 기반 개인화 순위
 - **한글 종목명 지원**
+
+### 🎛️ 사이드바 UX 최적화 (v3.1)
+- **탭별 설정 최상단 배치**: 자주 사용하는 설정이 즉시 접근 가능
+- **시장 선택 토글 버튼**: 가로 2열 버튼으로 공간 50% 절약
+- **설정 통합 Expander**: 사용자/API/알림 설정을 탭으로 통합
+- **AI 투자 비서 하단 고정**: 모든 탭에서 일관된 접근성
 
 ---
 
