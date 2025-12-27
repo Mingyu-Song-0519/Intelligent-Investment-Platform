@@ -2377,6 +2377,13 @@ def main():
                     st.session_state.alert_config = {"enabled": False}
                     st.caption("알림을 활성화하면 주요 이벤트를 알려드립니다.")
 
+    # ==========================================
+    # Phase 1: AI 챗봇 - 사이드바 하단 고정
+    # ==========================================
+    with st.sidebar:
+        if CHATBOT_AVAILABLE:
+            render_sidebar_chat()
+
     # 화면 분할 모드 토글
     split_mode = st.toggle("🖥️ 화면 분할 모드", value=False, help="⚠️ 실험적 기능: 두 개의 화면을 나란히 표시합니다 (와이드 모드 권장). 일부 기능이 정상 작동하지 않을 수 있습니다.")
     
@@ -2610,9 +2617,6 @@ def main():
             market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
             st.info(f"현재 시장: {market_label}")
         
-        # Phase D: AI 챗봇 (모든 탭에서 항상 표시)
-        if CHATBOT_AVAILABLE:
-            render_sidebar_chat()
     # 탭 콘텐츠 렌더링
     if selected_tab == "🔴 실시간 시세" and current_market == "KR":
         display_realtime_data()
