@@ -41,7 +41,7 @@ def show_ranking_page():
     
     if not profile:
         st.warning("⚠️ 투자 성향 진단이 필요합니다.")
-        if st.button("📊 성향 진단하기", use_container_width=True):
+        if st.button("📊 성향 진단하기", width="stretch"):
             st.session_state.page = "assessment"
             st.rerun()
         return
@@ -127,7 +127,7 @@ def _show_ranking_chart(ranked_stocks: List[RankedStock]):
         st.plotly_chart(fig, key="ranking_chart_main", width="stretch")
     except TypeError:
         # 구버전 호환성
-        st.plotly_chart(fig, key="ranking_chart_main", use_container_width=True)
+        st.plotly_chart(fig, key="ranking_chart_main", width="stretch")
 
 
 def _show_ranking_table(
@@ -158,7 +158,7 @@ def _show_ranking_table(
             # 피드백 버튼
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ 관심 종목 추가", key=f"accept_{stock.ticker}", use_container_width=True):
+                if st.button("✅ 관심 종목 추가", key=f"accept_{stock.ticker}", width="stretch"):
                     # 1. 추천 수락 처리 (기존)
                     recs = service.get_user_recommendations(user_id)
                     for rec in recs:
@@ -191,7 +191,7 @@ def _show_ranking_table(
                         st.warning(f"관심 종목 추가 실패: {e}")
             
             with col2:
-                if st.button("❌ 관심 없음", key=f"reject_{stock.ticker}", use_container_width=True):
+                if st.button("❌ 관심 없음", key=f"reject_{stock.ticker}", width="stretch"):
                     reason = st.text_input(
                         "사유 (선택)",
                         key=f"reason_{stock.ticker}",
@@ -257,7 +257,7 @@ def _display_recommendation_card(
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("✅ 수락", key=f"accept_{rec.recommendation_id}", use_container_width=True, type="primary"):
+            if st.button("✅ 수락", key=f"accept_{rec.recommendation_id}", width="stretch", type="primary"):
                 service.process_feedback(user_id, rec.recommendation_id, "accept")
                 st.success("✅ 추천을 수락했습니다! 프로필이 업데이트됩니다.")
                 st.rerun()
@@ -268,7 +268,7 @@ def _display_recommendation_card(
                 ["선택", "변동성이 너무 큼", "해당 섹터에 관심 없음", "투자 금액 부담", "기타"],
                 key=f"reject_reason_{rec.recommendation_id}"
             )
-            if st.button("❌ 거절", key=f"reject_{rec.recommendation_id}", use_container_width=True):
+            if st.button("❌ 거절", key=f"reject_{rec.recommendation_id}", width="stretch"):
                 reason = reject_reason if reject_reason != "선택" else ""
                 service.process_feedback(user_id, rec.recommendation_id, "reject", reason)
                 st.info("피드백이 반영되었습니다.")

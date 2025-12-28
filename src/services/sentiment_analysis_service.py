@@ -92,6 +92,53 @@ class SentimentAnalysisService:
             print(f"[WARNING] 감성 피처 생성 오류: {e}")
             return self._get_neutral_features()
     
+    def get_batch_sentiment_for_screener(self, tickers_with_names: Dict[str, str], market: str = "KR") -> Dict[str, Dict[str, Any]]:
+        """
+        스크리너 후보군 상위 종목들에 대해 뉴스를 모아 배치로 Gemini 감성 분석 수행 (성능 최적화)
+        
+        Args:
+            tickers_with_names: { '005930': '삼성전자', ... }
+            market: 시장 코드
+            
+        Returns:
+            { '005930': {'score': 0.5, 'reason': '...'}, ... }
+        """
+        # 1. 모든 종목 뉴스 수집 (제목만 추출)
+        all_headlines = {}
+        for ticker, name in tickers_with_names.items():
+            try:
+                if market == "US":
+                    articles = self._collect_us_news(ticker)
+                else:
+                    articles = self._collect_kr_news(ticker, name)
+                
+                headlines = [a.get('title', '') for a in articles[:5] if a.get('title')]
+                if headlines:
+                    all_headlines[ticker] = headlines
+            except Exception as e:
+                print(f"[WARNING] Batch news collection failed for {ticker}: {e}")
+
+        if not all_headlines:
+            return {}
+
+        # 2. LLM 배치 분석 시도
+        if self.use_llm and hasattr(self.sentiment_analyzer, 'llm_analyzer') and self.sentiment_analyzer.llm_analyzer:
+            try:
+                return self.sentiment_analyzer.llm_analyzer.analyze_tickers_batch(all_headlines)
+            except Exception as e:
+                print(f"[ERROR] Gemini batch sentiment failed: {e}")
+        
+        # 3. Fallback: 기존 키워드 방식
+        results = {}
+        for ticker, headlines in all_headlines.items():
+            text = " ".join(headlines)
+            score = self.sentiment_analyzer.analyze_sentiment(text)
+            results[ticker] = {
+                "score": score,
+                "reason": "키워드 기반 분석 (Fallback)"
+            }
+        return results
+    
     def add_sentiment_to_dataframe(
         self,
         df: pd.DataFrame,

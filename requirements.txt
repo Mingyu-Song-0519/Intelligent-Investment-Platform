@@ -15,7 +15,7 @@ catboost>=1.2.0
 tensorflow>=2.14.0
 
 # Phase D: AI Chatbot (Gemini API)
-google-generativeai>=0.8.0
+google-genai
 
 # Visualization
 matplotlib>=3.7.0

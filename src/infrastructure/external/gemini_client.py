@@ -52,7 +52,8 @@ class GeminiClient(ILLMClient):
             api_key: Gemini API 키 (None이면 환경변수/Secrets에서 로드)
         """
         self.api_key = api_key
-        self.model = None
+        self.client = None
+        self.selected_model_name = 'gemini-2.0-flash'
         self._initialized = False
         
         self._init_client()
@@ -60,7 +61,7 @@ class GeminiClient(ILLMClient):
     def _init_client(self):
         """클라이언트 초기화"""
         try:
-            import google.generativeai as genai
+            from google import genai
             
             # API 키 로드 순서: 인자 > Streamlit Secrets > 환경변수
             if self.api_key is None:
@@ -70,35 +71,49 @@ class GeminiClient(ILLMClient):
                 logger.warning("[GeminiClient] API key not found")
                 return
             
-            genai.configure(api_key=self.api_key)
+            # 신규 API: Client 생성
+            self.client = genai.Client(api_key=self.api_key)
             
-            # gemini-2.0-flash 사용 시도 (사용자 환경에서 확인된 최신 안정 모델)
+            # 모델 목록 로드 및 선정
             try:
-                # 사용 가능한 모델 목록에서 가장 적합한 모델 찾기
-                available_models = [m.name.split('/')[-1] for m in genai.list_models() 
-                                  if 'generateContent' in m.supported_generation_methods]
+                available_models = []
+                for m in self.client.models.list():
+                    # 신규/구버전 SDK 속성 대응
+                    methods = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_methods', [])
+                    if 'generateContent' in methods or 'gemini' in m.name.lower():
+                        available_models.append(m.name.split('/')[-1])
                 
                 if 'gemini-2.0-flash' in available_models:
-                    model_name = 'gemini-2.0-flash'
-                elif 'gemini-2.0-flash-lite' in available_models:
-                    model_name = 'gemini-2.0-flash-lite'
-                elif 'gemini-flash-latest' in available_models:
-                    model_name = 'gemini-flash-latest'
+                    self.selected_model_name = 'gemini-2.0-flash'
+                elif 'gemini-1.5-flash' in available_models:
+                    self.selected_model_name = 'gemini-1.5-flash'
+                elif available_models:
+                    self.selected_model_name = available_models[0]
                 else:
-                    # 목록에 없어도 시도해볼만한 기본값
-                    model_name = 'gemini-2.0-flash'
+                    self.selected_model_name = 'gemini-2.0-flash'
                 
-                self.model = genai.GenerativeModel(model_name)
-                logger.info(f"[GeminiClient] Selected model: {model_name}")
+                logger.info(f"[GeminiClient] Selected model: {self.selected_model_name}")
             except Exception as e:
                 logger.warning(f"[GeminiClient] Model selection failed, using default: {e}")
-                self.model = genai.GenerativeModel('gemini-2.0-flash')
+                self.selected_model_name = 'gemini-2.0-flash'
+            
+            # 사용자 설정 모델 확인 (Streamlit Session State)
+            try:
+                import streamlit as st
+                if hasattr(st, 'session_state') and 'gemini_model_name' in st.session_state:
+                    preferred = st.session_state['gemini_model_name']
+                    # 모델이 유효한지 확인하지 않고 설정 (새로운 모델일 수 있음)
+                    if preferred:
+                        self.selected_model_name = preferred
+                        logger.info(f"[GeminiClient] Overridden by session state: {self.selected_model_name}")
+            except:
+                pass
                 
             self._initialized = True
-            logger.info(f"[GeminiClient] Initialized successfully with model: {self.model.model_name}")
+            logger.info(f"[GeminiClient] Initialized successfully with model: {self.selected_model_name}")
             
         except ImportError:
-            logger.error("[GeminiClient] google-generativeai not installed")
+            logger.error("[GeminiClient] google-genai not installed")
         except Exception as e:
             logger.error(f"[GeminiClient] Init failed: {e}")
             raise # 에러를 상위로 전파하여 UI에서 보이게 함
@@ -128,23 +143,27 @@ class GeminiClient(ILLMClient):
         Returns:
             생성된 텍스트
         """
-        if not self._initialized or self.model is None:
+        if not self._initialized or self.client is None:
             raise RuntimeError("GeminiClient not initialized. Check API key.")
         
         try:
-            import google.generativeai as genai
+            from google import genai
             
-            # 시스템 지시가 변경되었을 경우 모델 재설정 (native support 사용)
+            # 신규 API: GenerateContentConfig 사용
             if system_instruction:
-                model_name = self.model.model_name.split('/')[-1]
-                model = genai.GenerativeModel(
-                    model_name=model_name,
+                config = genai.types.GenerateContentConfig(
                     system_instruction=system_instruction
                 )
+                response = self.client.models.generate_content(
+                    model=self.selected_model_name,
+                    contents=prompt,
+                    config=config
+                )
             else:
-                model = self.model
-            
-            response = model.generate_content(prompt)
+                response = self.client.models.generate_content(
+                    model=self.selected_model_name,
+                    contents=prompt
+                )
             
             # 응답이 비어있거나 차단된 경우 처리
             if not response or not hasattr(response, 'text'):
@@ -164,7 +183,34 @@ class GeminiClient(ILLMClient):
     
     def is_available(self) -> bool:
         """서비스 사용 가능 여부 확인"""
-        return self._initialized and self.model is not None
+        return self._initialized and self.client is not None
+
+    def get_available_models(self) -> list[str]:
+        """사용 가능한 모델 목록 반환"""
+        if not self._initialized or self.client is None:
+            return []
+        
+        try:
+            available = []
+            for m in self.client.models.list():
+                # 신규/구버전 SDK 속성 대응
+                methods = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_methods', [])
+                # 'generateContent' 권한이 있거나, 이름에 'gemini'가 포함된 모델만 추출
+                if 'generateContent' in methods or 'gemini' in m.name.lower():
+                    name = m.name.split('/')[-1]
+                    if name not in available:
+                        available.append(name)
+            
+            # 정렬 (최신 모델이 위로 오게 하거나 알파벳순)
+            available.sort()
+            return available
+        except Exception as e:
+            logger.warning(f"[GeminiClient] Failed to list models: {e}")
+            return []
+
+    def set_model(self, model_name: str):
+        """사용할 모델 설정"""
+        self.selected_model_name = model_name
 
 
 class MockLLMClient(ILLMClient):
@@ -188,3 +234,11 @@ class MockLLMClient(ILLMClient):
     def is_available(self) -> bool:
         """항상 사용 가능"""
         return True
+
+    def get_available_models(self) -> list[str]:
+        """Mock 사용 가능 모델"""
+        return ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+
+    def set_model(self, model_name: str):
+        """모델 설정 (Mock)"""
+        pass

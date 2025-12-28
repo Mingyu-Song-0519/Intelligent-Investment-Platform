@@ -7,7 +7,7 @@ Gemini LLM을 활용한 고급 감성 분석
 import logging
 import json
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 from src.infrastructure.external.gemini_client import ILLMClient
@@ -44,20 +44,28 @@ class LLMSentimentAnalyzer:
     """
     
     SENTIMENT_PROMPT_TEMPLATE = """
-다음 금융 관련 텍스트의 감성을 분석하세요:
-
-"{text}"
-
-분석 기준:
-- 주가/기업에 미치는 영향을 기준으로 평가
-- 긍정: 실적 호조, 신사업 진출, 수주 증가, 목표가 상향 등
-- 부정: 실적 부진, 소송, 규제, 목표가 하향, 하락 전망 등
-- 중립: 단순 사실 보도, 애매한 정보
-
-반드시 아래 JSON 형식으로만 답변하세요:
-{{"score": -1.0~1.0 사이의 숫자, "confidence": 0~1 사이의 숫자, "keywords": ["감성과 관련된", "핵심 키워드들"]}}
-
 JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.
+"""
+
+    BATCH_TICKER_PROMPT_TEMPLATE = """
+다음은 여러 주식 종목들의 최신 뉴스 헤드라인 목록입니다.
+각 종목별로 뉴스 맥락을 분석하여 향후 주가에 미칠 영향(감성 점수)을 산출하세요.
+
+점수 기준:
+- 1.0: 매우 긍정 (강력한 호재, 어닝 서프라이즈, 대규모 수주 등)
+- 0.5: 긍정 (일반적 호재, 양호한 실적 등)
+- 0.0: 중립 (단순 사실 보도, 영향 미미)
+- -0.5: 부정 (일반적 악재, 실적 하회 등)
+- -1.0: 매우 부정 (강력한 악재, 횡령, 부도 위험 등)
+
+분석 대상 프로젝트 데이터:
+{ticker_data}
+
+반드시 아래 JSON 형식으로만 답변하세요. 다른 설명은 생략하세요:
+{{
+  "TICKER_CODE_1": {{"score": 0.5, "reason": "핵심 긍정 요인 요약"}},
+  "TICKER_CODE_2": {{"score": -0.3, "reason": "핵심 부정 요인 요약"}}
+}}
 """
     
     def __init__(self, llm_client: ILLMClient):
@@ -113,6 +121,43 @@ JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.
                 results.append(SentimentResult(score=0.0, confidence=0.0, source='error'))
         
         return results
+
+    def analyze_tickers_batch(self, ticker_headlines: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+        """
+        여러 종목의 뉴스 헤드라인을 한 번에 분석 (Gemini Batch)
+        
+        Args:
+            ticker_headlines: { '005930': ['뉴스1', '뉴스2'], ... }
+            
+        Returns:
+            { '005930': {'score': 0.5, 'reason': '...'}, ... }
+        """
+        if not ticker_headlines:
+            return {}
+            
+        try:
+            # 텍스트 데이터 구성
+            formatted_data = ""
+            for ticker, headlines in ticker_headlines.items():
+                headlines_str = "\n".join([f"- {h}" for h in headlines[:5]]) # 종목당 최대 5개 뉴스
+                formatted_data += f"\n[{ticker}]\n{headlines_str}\n"
+
+            prompt = self.BATCH_TICKER_PROMPT_TEMPLATE.format(ticker_data=formatted_data)
+            response = self.llm_client.generate(prompt)
+            
+            # JSON 추출 및 파싱
+            json_str = response.strip()
+            if '```' in json_str:
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', json_str, re.DOTALL)
+                if match:
+                    json_str = match.group(1)
+            
+            result_data = json.loads(json_str)
+            return result_data
+            
+        except Exception as e:
+            logger.error(f"[LLMSentiment] Batch ticker analysis failed: {e}")
+            return {}
     
     def _parse_response(self, response: str) -> SentimentResult:
         """LLM 응답 파싱"""

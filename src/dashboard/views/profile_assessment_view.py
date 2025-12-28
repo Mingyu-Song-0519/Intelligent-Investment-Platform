@@ -87,7 +87,7 @@ def _show_existing_profile(profile: InvestorProfile, service: ProfileAssessmentS
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("🔄 재진단 시작", use_container_width=True):
+        if st.button("🔄 재진단 시작", width="stretch"):
             service.delete_profile(profile.user_id)
             # 세션 상태 초기화
             for key in ['assessment_answers', 'current_question_idx', 'assessment_session', 'show_ranking_view', 'show_profile_edit']:
@@ -95,12 +95,12 @@ def _show_existing_profile(profile: InvestorProfile, service: ProfileAssessmentS
             st.rerun()
     
     with col2:
-        if st.button("🏆 맞춤 종목 보기", use_container_width=True):
+        if st.button("🏆 맞춤 종목 보기", width="stretch"):
             st.session_state.show_ranking_view = True
             st.rerun()
     
     with col3:
-        if st.button("📝 프로필 수정", use_container_width=True):
+        if st.button("📝 프로필 수정", width="stretch"):
             st.session_state.show_profile_edit = True
             st.rerun()
 
@@ -153,7 +153,7 @@ def _show_inline_ranking(profile: InvestorProfile):
             try:
                 st.plotly_chart(fig, key="inline_ranking_chart", width="stretch")
             except TypeError:
-                st.plotly_chart(fig, key="inline_ranking_chart", use_container_width=True)
+                st.plotly_chart(fig, key="inline_ranking_chart", width="stretch")
             
             # 상세 정보
             for stock in ranked_stocks[:5]:
@@ -211,7 +211,7 @@ def _show_profile_edit(profile: InvestorProfile, service: ProfileAssessmentServi
     
     st.divider()
     
-    if st.button("💾 변경사항 저장", type="primary", use_container_width=True):
+    if st.button("💾 변경사항 저장", type="primary", width="stretch"):
         # 프로필 업데이트
         profile.risk_tolerance = RiskTolerance(new_risk)
         profile.investment_horizon = new_horizon
@@ -326,13 +326,13 @@ def _display_single_select(
     
     with col1:
         if current_idx > 0:
-            if st.button("◀ 이전", use_container_width=True):
+            if st.button("◀ 이전", width="stretch"):
                 st.session_state.current_question_idx = current_idx - 1
                 st.rerun()
     
     with col3:
         if current_idx < total - 1:
-            if st.button("다음 ▶", use_container_width=True, type="primary"):
+            if st.button("다음 ▶", width="stretch", type="primary"):
                 # session_state에 응답 저장
                 score = question.get_score_for_option(selected)
                 st.session_state.assessment_answers[question.question_id] = {
@@ -343,7 +343,7 @@ def _display_single_select(
                 st.session_state.current_question_idx = current_idx + 1
                 st.rerun()
         else:
-            if st.button("✅ 완료", use_container_width=True, type="primary"):
+            if st.button("✅ 완료", width="stretch", type="primary"):
                 score = question.get_score_for_option(selected)
                 st.session_state.assessment_answers[question.question_id] = {
                     'selected_option': selected,
@@ -382,13 +382,13 @@ def _display_multi_select(
     
     with col1:
         if current_idx > 0:
-            if st.button("◀ 이전", use_container_width=True):
+            if st.button("◀ 이전", width="stretch"):
                 st.session_state.current_question_idx = current_idx - 1
                 st.rerun()
     
     with col3:
         if current_idx < total - 1:
-            if st.button("다음 ▶", use_container_width=True, type="primary"):
+            if st.button("다음 ▶", width="stretch", type="primary"):
                 st.session_state.assessment_answers[question.question_id] = {
                     'selected_option': selected_label,
                     'score': 0,
@@ -397,7 +397,7 @@ def _display_multi_select(
                 st.session_state.current_question_idx = current_idx + 1
                 st.rerun()
         else:
-            if st.button("✅ 완료", use_container_width=True, type="primary"):
+            if st.button("✅ 완료", width="stretch", type="primary"):
                 st.session_state.assessment_answers[question.question_id] = {
                     'selected_option': selected_label,
                     'score': 0,
@@ -504,7 +504,7 @@ def _complete_assessment(user_id: str, service: ProfileAssessmentService):
         
         st.divider()
         
-        if st.button("🏆 맞춤 종목 확인하기", use_container_width=True, type="primary"):
+        if st.button("🏆 맞춤 종목 확인하기", width="stretch", type="primary"):
             st.session_state.page = "ranking"
             # 세션 정리
             for key in ['assessment_answers', 'current_question_idx']:
@@ -542,7 +542,7 @@ def show_quick_profile_setup():
     st.subheader("⚡ 빠른 시작")
     st.write("설문 없이 기본 프로필로 시작할 수 있습니다.")
     
-    if st.button("기본 프로필로 시작 (균형형)", use_container_width=True):
+    if st.button("기본 프로필로 시작 (균형형)", width="stretch"):
         service = get_assessment_service()
         user_id = st.session_state.get('user_id', 'default_user')
         profile = service.create_default_profile(user_id)

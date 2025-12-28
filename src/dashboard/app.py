@@ -2329,6 +2329,7 @@ def main():
                 try:
                     from src.services.api_key_service import APIKeyService
                     from src.infrastructure.repositories.session_api_key_repository import SessionAPIKeyRepository
+                    from src.infrastructure.external.gemini_client import GeminiClient
                     
                     repo = SessionAPIKeyRepository()
                     api_service = APIKeyService(repository=repo)
@@ -2339,16 +2340,63 @@ def main():
                         st.success("✅ Gemini API 키 설정됨")
                         col1, col2 = st.columns([2, 1])
                         with col1:
-                            if st.button("🔄 검증", key="validate_api_key_unified", use_container_width=True):
+                            if st.button("🔄 검증", key="validate_api_key_unified", width="stretch"):
                                 is_valid, msg = repo.validate_key('gemini_api_key', current_key)
                                 if is_valid:
                                     st.success(msg)
                                 else:
                                     st.error(msg)
                         with col2:
-                            if st.button("🗑️", key="clear_api_key_unified", use_container_width=True, help="API 키 삭제"):
+                            if st.button("🗑️", key="clear_api_key_unified", width="stretch", help="API 키 삭제"):
                                 api_service.delete_gemini_key()
+                                if 'gemini_model_list' in st.session_state:
+                                    del st.session_state['gemini_model_list']
                                 st.rerun()
+                        
+                        # 모델 선택 UI
+                        st.markdown("---")
+                        st.markdown("**🤖 모델 선택**")
+                        
+                        # 모델 목록 캐싱 및 로드
+                        if 'gemini_model_list' not in st.session_state:
+                            with st.spinner("사용 가능한 모델 목록을 불러오는 중..."):
+                                try:
+                                    client = GeminiClient(api_key=current_key)
+                                    models = client.get_available_models()
+                                    if models:
+                                        st.session_state['gemini_model_list'] = models
+                                    else:
+                                        st.warning("사용 가능한 모델을 찾을 수 없습니다.")
+                                        st.session_state['gemini_model_list'] = []
+                                except Exception as e:
+                                    st.error(f"모델 목록 로드 실패: {e}")
+                                    st.session_state['gemini_model_list'] = []
+                        
+                        models = st.session_state.get('gemini_model_list', [])
+                        if models:
+                            # 현재 선택된 모델 확인
+                            current_selection = st.session_state.get('gemini_model_name', 'gemini-2.0-flash')
+                            
+                            # 목록에 없으면 첫 번째 모델 선택 (fallback)
+                            index = 0
+                            if current_selection in models:
+                                index = models.index(current_selection)
+                            elif 'gemini-2.0-flash' in models:
+                                index = models.index('gemini-2.0-flash')
+                            
+                            selected_model = st.selectbox(
+                                "사용할 Gemini 모델", 
+                                models, 
+                                index=index,
+                                key="gemini_model_selector"
+                            )
+                            
+                            # 선택 변경 시 session_state 업데이트
+                            if selected_model != st.session_state.get('gemini_model_name'):
+                                st.session_state['gemini_model_name'] = selected_model
+                                st.rerun()
+                        else:
+                            st.info("모델 목록을 불러올 수 없습니다. 기본 모델이 사용됩니다.")
                     else:
                         st.info("💡 AI 챗봇, Gemini 감성분석 등에 필요합니다")
                         api_key_input = st.text_input(
@@ -2363,7 +2411,7 @@ def main():
                         with col1:
                             validate_on_save = st.checkbox("저장 시 검증", value=True, key="validate_on_save_unified")
                         
-                        if st.button("💾 저장", key="save_api_key_unified", use_container_width=True):
+                        if st.button("💾 저장", key="save_api_key_unified", width="stretch"):
                             if api_key_input:
                                 success, msg = api_service.set_gemini_key(
                                     st.session_state.get('user_id', 'default_user'),
@@ -2372,6 +2420,8 @@ def main():
                                 )
                                 if success:
                                     st.success(msg)
+                                    if 'gemini_model_list' in st.session_state:
+                                        del st.session_state['gemini_model_list']
                                     st.rerun()
                                 else:
                                     st.error(msg)
@@ -2461,7 +2511,7 @@ def main():
         with col1:
             if st.button(
                 "🇰🇷 한국",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if current_market_state == "KR" else "secondary",
                 key="market_btn_kr"
             ):
@@ -2473,7 +2523,7 @@ def main():
         with col2:
             if st.button(
                 "🇺🇸 미국",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if current_market_state == "US" else "secondary",
                 key="market_btn_us"
             ):
@@ -2734,7 +2784,8 @@ def main():
     if 'pending_tab' in st.session_state:
         pending = st.session_state.pending_tab
         if pending in tab_options:
-            default_tab = pending
+            # st.segmented_control의 시각적 상태 동기화를 위해 key 값 명시적 갱신
+            st.session_state.main_tab_selector = pending
             st.session_state.active_tab_name = pending  # 탭 상태 갱신
         del st.session_state.pending_tab
     else:
@@ -2813,7 +2864,7 @@ def main():
                     st.session_state['selected_ma_periods'] = selected_periods
             
             fig = create_candlestick_chart(df, ticker_name)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             display_signals(df)
             
             # AI 분석 버튼 (Phase A)
@@ -3519,7 +3570,7 @@ def display_social_trend():
                         xaxis_title="날짜",
                         yaxis_title="관심도 (0-100)"
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     
                     # 통계
                     col1, col2, col3 = st.columns(3)
@@ -3683,7 +3734,7 @@ def display_factor_investing():
                         template="plotly_dark",
                         title="5-Factor Radar Chart"
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     
                     # 세부 점수 카드
                     c1, c2, c3, c4, c5 = st.columns(5)
@@ -3759,7 +3810,7 @@ def display_factor_investing():
                     st.dataframe(
                         df.style.background_gradient(cmap="RdYlGn", subset=["종합 점수"]),
                         hide_index=True,
-                        use_container_width=True
+                        width="stretch"
                     )
                     
                 except Exception as e:

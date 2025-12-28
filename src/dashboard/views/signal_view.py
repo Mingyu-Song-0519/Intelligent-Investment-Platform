@@ -77,7 +77,7 @@ def render_signal_card(ticker: str, stock_name: str, user_id: str = "default_use
         stock_name: 종목명
         user_id: 사용자 ID
     """
-    if st.button("📊 매매 신호 생성", key=f"signal_btn_{ticker}", use_container_width=True):
+    if st.button("📊 매매 신호 생성", key=f"signal_btn_{ticker}", width="stretch"):
         with st.spinner("매매 신호를 생성하는 중..."):
             try:
                 service = _get_signal_service()

@@ -29,11 +29,11 @@ def render_watchlist_tab():
         st.info("👈 **맞춤 종목 순위**에서 '관심 종목 추가' 버튼으로 종목을 추가할 수 있습니다.")
     
     with col2:
-        if st.button("🔄 새로고침", use_container_width=True):
+        if st.button("🔄 새로고침", width="stretch"):
             st.rerun()
     
     with col3:
-        if st.button("➕ 직접 추가", use_container_width=True):
+        if st.button("➕ 직접 추가", width="stretch"):
             st.session_state.show_add_dialog = True
     
     # 직접 추가 다이얼로그
@@ -130,7 +130,7 @@ def _render_add_dialog(service: WatchlistService, user_id: str):
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("✅ 추가", use_container_width=True):
+            if st.button("✅ 추가", width="stretch"):
                 if ticker and stock_name:
                     try:
                         market_code = "KR" if "한국" in market else "US"
@@ -144,7 +144,7 @@ def _render_add_dialog(service: WatchlistService, user_id: str):
                     st.warning("종목 코드와 종목명을 입력하세요.")
         
         with col2:
-            if st.button("❌ 취소", use_container_width=True):
+            if st.button("❌ 취소", width="stretch"):
                 st.session_state.show_add_dialog = False
                 st.rerun()
 
@@ -248,7 +248,7 @@ def _render_change_chart(summaries: List[WatchlistSummary]):
             plot_bgcolor='rgba(0,0,0,0)'
         )
         
-        st.plotly_chart(fig, key="watchlist_chart", use_container_width=True)
+        st.plotly_chart(fig, key="watchlist_chart", width="stretch")
 
 
 def _render_watchlist_table(

@@ -49,7 +49,7 @@ def _get_available_tabs() -> list:
             "🔥 Market Buzz",
             "💎 팩터 투자",
             "👤 투자 성향",
-            "🌅 AI 스크리너"
+            "🌅 AI 종목 추천"
         ]
     else:
         return [
@@ -67,7 +67,7 @@ def _get_available_tabs() -> list:
             "🔥 Market Buzz",
             "💎 팩터 투자",
             "👤 투자 성향",
-            "🌅 AI 스크리너"
+            "🌅 AI 종목 추천"
         ]
 
 
@@ -92,9 +92,22 @@ def _get_chat_service() -> ChatService:
         stock_listing = _get_stock_listing()
         available_tabs = _get_available_tabs()
         
+        # Phase C/F: 서비스 인스턴스 지연 생성
+        screener_service = None
+        report_service = None
+        try:
+            from src.dashboard.views.screener_view import _get_screener_service
+            from src.dashboard.views.ai_analysis_view import _get_report_service
+            screener_service = _get_screener_service()
+            report_service = _get_report_service()
+        except Exception as e:
+            logger.debug(f"[ChatService] Service init for ActionExecutor failed: {e}")
+        
         action_executor = ActionExecutor(
             stock_listing=stock_listing,
-            available_tabs=available_tabs
+            available_tabs=available_tabs,
+            screener_service=screener_service,
+            investment_report_service=report_service
         )
         
         service = ChatService(llm_client, action_executor=action_executor)
@@ -133,7 +146,7 @@ def _extract_context() -> ContextData:
                      context.ai_report_summary = report.summary
     
     # 스크리너 결과
-    elif selected_tab == "🌅 AI 스크리너":
+    elif selected_tab == "🌅 AI 종목 추천":
         if 'screener_picks' in st.session_state:
             picks = st.session_state.screener_picks
             context.screener_results = [
@@ -184,7 +197,7 @@ def _handle_action_result(result: Optional[ActionExecutionResult]):
             logger.info(f"[ActionHandler] Select stock: {name}({ticker})")
     
     elif action_type == 'run_screener':
-        tab_name = data.get('tab_name', '🌅 AI 스크리너')
+        tab_name = data.get('tab_name', '🌅 AI 종목 추천')
         st.session_state.pending_tab = tab_name
         # 스크리너 결과가 있으면 저장
         if 'picks' in data:
@@ -203,11 +216,16 @@ def _test_api_key(api_key: str) -> tuple[bool, str]:
         return False, "API 키가 너무 짧습니다"
     
     try:
-        import google.generativeai as genai
+        from google import genai
         
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        response = model.generate_content("Test")
+        # 신규 API: Client 생성
+        client = genai.Client(api_key=api_key)
+        
+        # 신규 API: 콘텐츠 생성 테스트
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents="Test"
+        )
         
         if response and response.text:
             return True, "연결 성공! (gemini-2.0-flash 사용)"
@@ -215,16 +233,19 @@ def _test_api_key(api_key: str) -> tuple[bool, str]:
             return False, "API 응답 없음"
             
     except ImportError:
-        return False, "google-generativeai 미설치"
+        return False, "google-genai 미설치"
     except Exception as e:
         error_msg = str(e)
         
+        # 모델 404 에러 시 fallback
         if "404" in error_msg and "models/" in error_msg:
-            fallbacks = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash']
+            fallbacks = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest']
             for model_name in fallbacks:
                 try:
-                    m = genai.GenerativeModel(model_name)
-                    res = m.generate_content("Test")
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents="Test"
+                    )
                     if res and res.text:
                         return True, f"연결 성공! ({model_name} 사용)"
                 except:
@@ -266,7 +287,7 @@ def render_sidebar_chat():
         st.sidebar.info("💡 사이드바 상단 **'🔑 AI API 설정'**에서 API 키를 입력해주세요.")
 
     # 0-3. 채팅 세션 초기화 버튼
-    if st.sidebar.button("💬 대화 초기화", use_container_width=True, help="대화 기록을 지우고 서비스를 재시작합니다"):
+    if st.sidebar.button("💬 대화 초기화", width="stretch", help="대화 기록을 지우고 서비스를 재시작합니다"):
         if 'chat_service' in st.session_state:
             del st.session_state.chat_service
         if 'chat_history' in st.session_state:

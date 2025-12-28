@@ -112,7 +112,7 @@ def render_market_health():
             margin=dict(l=20, r=20, t=20, b=20),
             showlegend=False
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         
     except Exception as e:
         st.error(f"시장 체력 데이터 로드 실패: {e}")
@@ -183,7 +183,7 @@ def render_volatility_stress():
                 xaxis_title="",
                 yaxis_title="VIX"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         
     except Exception as e:
         st.error(f"VIX 데이터 로드 실패: {e}")
@@ -226,7 +226,7 @@ def render_factor_top5():
                 })
             
             df = pd.DataFrame(data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
             
             # 레이더 차트 (1위 종목)
             best = top_stocks[0]
@@ -245,7 +245,7 @@ def render_factor_top5():
                 margin=dict(l=20, r=20, t=40, b=20),
                 title=f"🥇 {best.ticker} 팩터 프로필"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             
             # 새로고침 버튼
             if st.button("🔄 팩터 스코어 새로고침", key="refresh_factor"):

@@ -213,7 +213,7 @@ def _render_sector_heatmap(
             plot_bgcolor='rgba(0,0,0,0)'
         )
         
-        st.plotly_chart(fig, key="sector_heatmap", use_container_width=True)
+        st.plotly_chart(fig, key="sector_heatmap", width="stretch")
         
         # 요약 메트릭
         rising = len([s for s in heatmap if s.avg_change_pct > 0])

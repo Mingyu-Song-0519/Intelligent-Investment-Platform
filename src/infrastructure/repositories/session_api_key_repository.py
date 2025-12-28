@@ -123,13 +123,13 @@ class SessionAPIKeyRepository(IAPIKeyRepository):
         간단한 API 호출로 키 유효성 확인
         """
         try:
-            import google.generativeai as genai
+            from google import genai
             
-            # 임시 설정
-            genai.configure(api_key=key_value)
+            # 신규 API: Client 생성
+            client = genai.Client(api_key=key_value)
             
             # 간단한 모델 목록 조회로 검증
-            models = list(genai.list_models())
+            models = list(client.models.list())
             
             if models:
                 logger.info("[SessionAPIKeyRepo] Gemini key validation success")

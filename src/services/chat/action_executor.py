@@ -180,9 +180,9 @@ class ActionExecutor:
         
         if not self.screener_service:
             return ActionExecutionResult.success_with_redirect(
-                "AI 스크리너 탭으로 이동합니다. 수동으로 실행해주세요.",
+                "AI 종목 추천 탭으로 이동합니다. 수동으로 실행해주세요.",
                 action,
-                data={'tab_name': '🌅 AI 스크리너', 'market': market}
+                data={'tab_name': '🌅 AI 종목 추천', 'market': market}
             )
         
         try:
@@ -205,10 +205,10 @@ class ActionExecutor:
                 })
             
             return ActionExecutionResult.success_with_redirect(
-                f"AI 스크리너 실행 완료: {len(picks)}개 종목 추천",
+                f"AI 종목 추천 실행 완료: {len(picks)}개 종목 추천",
                 action,
                 data={
-                    'tab_name': '🌅 AI 스크리너',
+                    'tab_name': '🌅 AI 종목 추천',
                     'market': market,
                     'picks': pick_summaries
                 }

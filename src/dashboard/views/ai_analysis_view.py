@@ -76,7 +76,7 @@ def render_ai_analysis_button(ticker: str, stock_name: str, user_id: str = "defa
     col1, col2 = st.columns([3, 1])
     
     with col2:
-        if st.button("🤖 AI 분석", key=f"ai_btn_{ticker}", use_container_width=True):
+        if st.button("🤖 AI 분석", key=f"ai_btn_{ticker}", width="stretch"):
             with st.spinner("AI가 분석 중입니다..."):
                 try:
                     service = _get_report_service()
@@ -169,7 +169,7 @@ def render_ai_analysis_tab(ticker: str, stock_name: str, user_id: str = "default
     st.header("🤖 AI 투자 분석")
     
     # 분석 요청 버튼
-    if st.button("📊 AI 분석 시작", key=f"ai_start_{ticker}", use_container_width=True):
+    if st.button("📊 AI 분석 시작", key=f"ai_start_{ticker}", width="stretch"):
         with st.spinner("AI가 분석 중입니다... (약 5-10초 소요)"):
             try:
                 service = _get_report_service()
