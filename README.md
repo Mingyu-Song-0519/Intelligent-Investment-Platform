@@ -14,6 +14,7 @@
 - [🏗️ 아키텍처](#️-아키텍처)
 - [🛠️ 설치 방법](#️-설치-방법)
 - [🚀 실행 방법](#-실행-방법)
+- [🧪 E2E 테스트](#-e2e-테스트)
 - [📂 프로젝트 구조](#-프로젝트-구조)
 - [🎯 기능 상세](#-기능-상세)
 
@@ -177,6 +178,125 @@ python -m streamlit run src/dashboard/app.py
 
 ---
 
+## 🧪 E2E 테스트
+
+### 테스트 개요
+Playwright 기반 End-to-End 테스트 스위트로 전체 사용자 워크플로우를 자동으로 검증합니다.
+
+**테스트 현황**: ✅ **30/30 통과 (100%)**
+
+### 테스트 커버리지
+
+| 기능 영역 | 테스트 수 | 통과율 | 주요 검증 사항 |
+|---------|----------|--------|---------------|
+| **Page Loading** | 4 | 100% | 초기 로딩, 성능, 콘솔 에러 |
+| **Market Toggle** | 6 | 100% | 한국/미국 시장 전환, 상태 유지 |
+| **Tab Settings** | 6 | 100% | 탭별 설정 표시, 동적 업데이트 |
+| **AI Chatbot** | 7 | 100% | 챗봇 위치, 중복 방지, 접근성 |
+| **Stock Analysis** | 7 | 100% | 데이터 조회, 차트 표시, 안정성 |
+
+### 설치 및 실행
+
+```bash
+# 의존성 설치
+npm install
+
+# Playwright 브라우저 설치
+npx playwright install chromium
+
+# 전체 테스트 실행
+npx playwright test --project=chromium
+
+# 특정 테스트만 실행
+npx playwright test tests/e2e/sidebar/test_market_toggle.spec.ts
+
+# UI 모드로 디버깅
+npx playwright test --ui
+
+# HTML 리포트 보기
+npx playwright show-report
+```
+
+### 주요 테스트 시나리오
+
+1. **페이지 로딩 검증**
+   - 초기 로드 10초 이내 완료
+   - 콘솔 에러 없이 정상 렌더링
+   - 모든 핵심 UI 요소 표시
+
+2. **시장 전환 기능**
+   - 한국 ↔ 미국 시장 토글 버튼 동작
+   - 시장 전환 시 상태 유지
+   - 2열 레이아웃 공간 최적화 검증
+
+3. **탭별 설정 UX**
+   - 탭 전환 시 설정 섹션 동적 업데이트
+   - 설정이 사이드바 최상단에 고정
+   - 스크롤 시에도 접근성 유지
+
+4. **AI 챗봇 검증 (CRITICAL)**
+   - 챗봇이 정확히 1개만 렌더링 (중복 방지)
+   - 사이드바 하단에 고정 배치
+   - 탭 전환 시에도 위치 유지
+
+5. **종목 분석 워크플로우**
+   - 종목 선택 드롭다운 표시
+   - 데이터 조회 버튼 동작
+   - 차트/테이블 정상 렌더링
+
+### 성과
+
+- **통과율**: 80% → 100% (+20%p)
+- **실행 시간**: 11.9분 → 2.0분 (-83%)
+- **안정성**: Flaky 테스트 0건
+
+### CI/CD 통합
+
+GitHub Actions에 통합 가능:
+
+```yaml
+# .github/workflows/e2e-tests.yml
+name: E2E Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install
+          npx playwright install chromium
+
+      - name: Run E2E tests
+        run: npx playwright test --project=chromium
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report
+          path: playwright-report/
+```
+
+### 문서
+
+- [E2E 테스트 계획](docs/E2E_TEST_PLAN.md)
+- [최종 실행 보고서](E2E_TEST_FINAL_REPORT.md)
+- [수정 보고서](E2E_TEST_FIXES_REPORT.md)
+
+---
+
 ## 📂 프로젝트 구조
 
 ```
@@ -232,6 +352,10 @@ Intelligent-Investment-Platform/
 │       └── technical_analyzer.py     # 기술적 분석
 │
 ├── 📁 tests/                         # 테스트
+│   ├── 📁 e2e/                       # 🆕 E2E 테스트 (Playwright)
+│   │   ├── 📁 page_loading/          # 페이지 로딩 테스트
+│   │   ├── 📁 sidebar/               # 사이드바 기능 테스트
+│   │   └── 📁 main_tabs/             # 메인 탭 기능 테스트
 │   └── integration/                  # 통합 테스트
 ├── 📄 requirements.txt               # 의존성
 ├── 📄 config.py                      # 설정
@@ -284,6 +408,7 @@ Intelligent-Investment-Platform/
 | **Data** | yfinance, pykrx, FinanceDataReader |
 | **Architecture** | Clean Architecture, DDD, DIP |
 | **Cache** | SQLite (TTL-based) |
+| **Testing** | 🆕 Playwright (E2E), pytest (Unit) |
 
 ---
 
