@@ -129,8 +129,12 @@ def render_morning_picks():
                 )
                 
                 st.session_state.screener_picks = picks
-                # st.session_state.screener_market = market  ← 삭제! (위젯이 자동 관리)
-                st.success(f"✅ {len(picks)}개 종목 발굴 완료!")
+                
+                # 폴백 모드 여부에 따른 알림
+                if service.fallback_active:
+                    st.warning("⚠️ 실시간 시장 스캔에 실패하여 '주요 우량주 유니버스' 기반으로 분석을 수행했습니다. (클라우드 IP 차단 또는 휴장 영향)")
+                else:
+                    st.success(f"✅ {len(picks)}개 종목 실시간 발굴 완료!")
                 
             except Exception as e:
                 import traceback

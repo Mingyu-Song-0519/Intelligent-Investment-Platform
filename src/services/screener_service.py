@@ -81,6 +81,7 @@ class ScreenerService:
         self.pykrx_gateway = pykrx_gateway
         self.tech_indicators = tech_indicators or self._get_default_tech_indicators()
         self.sentiment_service = sentiment_service
+        self.fallback_active = False # 폴백 활성화 여부 추적
 
     def _get_default_tech_indicators(self):
         """지표 계산기 기본값 (Lazy Import)"""
@@ -100,6 +101,7 @@ class ScreenerService:
         일일 스크리닝 실행 (Phase G: High-Performance 3-Stage Pipeline)
         """
         logger.info(f"[Screener] Starting optimized screen for {user_id}, market={market}")
+        self.fallback_active = False # 초기화
         
         # 이름 매핑 정보 획득 (한국 시장 선도시 수집)
         name_map = {}
@@ -117,7 +119,17 @@ class ScreenerService:
             snapshot = pd.DataFrame({'ticker': all_tickers})
 
         if snapshot is None or snapshot.empty:
-            logger.error("[Screener] Failed to get market snapshot")
+            logger.warning(f"[Screener] Failed to get market snapshot for {market}. Falling back to core stock universe.")
+            # 한국 시장인 경우 미리 정의된 핵심 종목 풀(Universe)로 폴백하여 분석 수행
+            if market == "KR":
+                self.fallback_active = True # 폴백 활성 표시
+                all_tickers = self._get_stock_universe("KR")
+                snapshot = pd.DataFrame({'ticker': all_tickers})
+            else:
+                return []
+
+        if snapshot is None or snapshot.empty:
+            logger.error("[Screener] Stage 1 failed: No stocks available for analysis")
             return []
 
         # 1.2: 기본 필터링 (거래량 > 0, 거래대금 기준)
@@ -129,20 +141,42 @@ class ScreenerService:
             snapshot = snapshot.sort_values(by='거래대금', ascending=False)
         
         target_tickers = snapshot['ticker'].tolist()
-        logger.info(f"[Screener] Stage 1 complete: {len(target_tickers)} stocks selected (Top 1000 prioritized)")
+        logger.info(f"[Screener] Stage 1 complete: {len(target_tickers)} stocks selected (Source: {'Market Scan' if '거래대금' in snapshot.columns else 'Core Universe'})")
 
         # [Stage 2] 대량 데이터 분석 (Batch OHLCV + Vectorized Indicators)
         # 2.1: 배치 데이터 수집 (최근 20일 OHLCV) - 병렬 처리
-        target_tickers = target_tickers[:100]  # 성능 안전장치: 상위 100개 종목 우선 분석 (기존 500개에서 축소하여 응답성 확보)
+        target_tickers = target_tickers[:100]  # 성능 안전장치: 상위 100개 종목 우선 분석
         logger.info(f"[Screener] Stage 2 starting: Fetching OHLCV for {len(target_tickers)} stocks")
         
         ohlcv_dict = self.pykrx_gateway.batch_get_ohlcv_parallel(target_tickers, period="1mo") if self.pykrx_gateway else {}
 
         if not ohlcv_dict:
-            logger.warning("[Screener] No OHLCV data fetched in Stage 2")
-            return []
+            logger.warning("[Screener] No OHLCV data fetched via PyKRX. Attempting YFinance fallback for Stage 2...")
+            # 한국 시장인 경우 .KS 티커로 변환하여 yfinance 수집 시도
+            yf_tickers = [f"{t}.KS" for t in target_tickers] # 우선 KOSPI로 가정 (.KS 붙여도 .KQ 종목 일부 동작)
+            try:
+                import yfinance as yf
+                # yfinance를 이용한 배치 수집
+                data = yf.download(yf_tickers, period="1mo", group_by='ticker', threads=True, progress=False)
+                
+                for t in target_tickers:
+                    ticker_data = data[f"{t}.KS"] if f"{t}.KS" in data else None
+                    if ticker_data is not None and not ticker_data.empty:
+                        # 컬럼명 정규화
+                        ticker_data = ticker_data.rename(columns={
+                            'Open': '시가', 'High': '고가', 'Low': '저가',
+                            'Close': '종가', 'Volume': '거래량'
+                        })
+                        ohlcv_dict[t] = ticker_data
+                
+                if not ohlcv_dict:
+                    return []
+                logger.info(f"[Screener] Stage 2 YFinance Fallback: Successfully fetched {len(ohlcv_dict)} stocks")
+            except Exception as e:
+                logger.error(f"[Screener] YFinance fallback failed: {e}")
+                return []
         
-        logger.info(f"[Screener] Stage 2: Fetched OHLCV for {len(ohlcv_dict)} stocks. Starting calculation...")
+        logger.info(f"[Screener] Stage 2: Data ready for {len(ohlcv_dict)} stocks. Starting calculation...")
 
         # 2.2: 벡터화 기술적 지표 계산
         combined_df = pd.concat([df.assign(ticker=t) for t, df in ohlcv_dict.items()])
@@ -301,18 +335,18 @@ class ScreenerService:
         # 현재는 샘플 종목만 반환
         
         if market == "KR":
-            # 한국 대표 종목 샘플
+            # 한국 핵심 우량주 유니버스 (Market Scan 실패 시 폴백용)
             return [
-                "005930.KS",  # 삼성전자
-                "000660.KS",  # SK하이닉스
-                "035420.KS",  # NAVER
-                "005380.KS",  # 현대차
-                "051910.KS",  # LG화학
-                "035720.KS",  # 카카오
-                "006400.KS",  # 삼성SDI
-                "068270.KS",  # 셀트리온
-                "207940.KS",  # 삼성바이오로직스
-                "105560.KS",  # KB금융
+                "005930", "000660", "035420", "005380", "051910", 
+                "035720", "006400", "068270", "207940", "105560",
+                "055550", "000270", "012330", "066570", "003550",
+                "003670", "373220", "000810", "086790", "032830",
+                "000100", "009150", "010130", "015760", "018260",
+                "024110", "030200", "033780", "034220", "034730",
+                "036570", "042660", "047050", "051900", "086280",
+                "090430", "096770", "105560", "138930", "139480",
+                "161390", "180640", "316140", "323410", "352820",
+                "361610", "377300", "402340"
             ]
         else:
             # 미국 대표 종목 샘플

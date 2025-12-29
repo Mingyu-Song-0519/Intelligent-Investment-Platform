@@ -269,7 +269,11 @@ class PyKRXGateway:
 
             # Phase 0-A Critical Fix: 주말/공휴일 대응 거래일 자동 감지
             if date is None:
-                date = self._get_last_trading_day()  # ✅ FIXED: 최근 거래일 사용
+                date = self._get_last_trading_day()
+            
+            if date is None:
+                logger.warning("[PyKRXGateway] No valid trading day detected within search range. (Possible IP Block or long holiday)")
+                return pd.DataFrame()
 
             result_dfs = []
             markets_to_fetch = ["KOSPI", "KOSDAQ"] if market == "ALL" else [market]
@@ -322,17 +326,26 @@ class PyKRXGateway:
             logger.error(f"[PyKRXGateway] Market snapshot failed: {e}")
             return pd.DataFrame()
 
-    def _get_last_trading_day(self) -> str:
-        """최근 거래일 (YYYYMMDD) 반환"""
-        from pykrx import stock
-        now = datetime.now()
-        for i in range(10):  # 최대 10일 전까지 탐색
-            target = (now - timedelta(days=i)).strftime("%Y%m%d")
-            # 특정 종목(삼성전자)의 데이터를 통해 휴장 여부 확인
-            df = stock.get_market_ohlcv_by_date(target, target, "005930")
-            if df is not None and not df.empty:
-                return target
-        return now.strftime("%Y%m%d")
+    def _get_last_trading_day(self) -> Optional[str]:
+        """
+        최근 거래일 (YYYYMMDD) 반환
+        네트워크 오류나 차단 발생 시 None 반환하여 상위 계층에서 폴백하도록 함
+        """
+        try:
+            from pykrx import stock
+            now = datetime.now()
+            # 최근 10일간 탐색하며 실제 데이터가 있는 날짜 탐색
+            for i in range(10):
+                target = (now - timedelta(days=i)).strftime("%Y%m%d")
+                # 삼성전자(005930) 데이터를 통해 휴장 및 데이터 가용성 확인
+                df = stock.get_market_ohlcv_by_date(target, target, "005930")
+                if df is not None and not df.empty:
+                    logger.debug(f"[PyKRXGateway] Found last trading day: {target}")
+                    return target
+            return None
+        except Exception as e:
+            logger.warning(f"[PyKRXGateway] Failed to detect last trading day (Possible IP Block): {e}")
+            return None
 
     def batch_get_investor_trading(self, tickers: List[str], days: int = 20) -> Dict[str, pd.DataFrame]:
         """다수 종목의 매매동향 병렬 조회"""
