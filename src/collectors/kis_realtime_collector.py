@@ -212,7 +212,8 @@ if __name__ == "__main__":
     print("=== 한국투자증권 실시간 데이터 (WebSocket) 테스트 ===\n")
     
     # 환경변수 로드
-    env_path = PROJECT_ROOT / ".env"
+    from pathlib import Path
+    env_path = Path(__file__).parent.parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
     

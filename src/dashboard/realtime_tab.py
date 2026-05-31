@@ -42,7 +42,8 @@ def display_realtime_data():
 
     # 2. .env 파일 확인 (Secrets에서 못 찾았을 경우)
     if not all([APP_KEY, APP_SECRET, ACCOUNT_NO]):
-        env_path = PROJECT_ROOT / ".env"
+        from pathlib import Path
+        env_path = Path(__file__).parent.parent.parent / ".env"
         if env_path.exists():
             load_dotenv(env_path)
             
