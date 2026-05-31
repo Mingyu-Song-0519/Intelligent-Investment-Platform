@@ -1,22 +1,49 @@
-# Base installation (dashboard + data collection + Korean market)
-# Run: pip install -e .
-#
-# With ML models:
-#   pip install -e ".[ml-boost]"       # XGBoost/LightGBM/CatBoost
-#   pip install -e ".[ml-torch]"       # Transformer + HuggingFace NLP
-#   pip install -e ".[ml-tf]"          # TensorFlow/Keras LSTM
-#   pip install -e ".[ml-all]"         # All ML
-#
-# With dev tools:
-#   pip install -e ".[dev]"
-#
-# Full install (everything):
-#   pip install -e ".[all]"
-#
-# Generate pinned lockfile (requires pip-tools):
-#   pip-compile pyproject.toml --output-file requirements-lock.txt
-#   pip-compile pyproject.toml --extra ml-all --output-file requirements-ml-lock.txt
+# Streamlit Cloud 배포용 requirements
+# pyproject.toml base dependencies를 직접 나열 (editable install 불안정 문제 회피)
 
-# This file intentionally delegates to pyproject.toml.
-# All version constraints are defined there.
+# Core data
+pandas>=2.0.0,<3.0.0
+numpy>=2.0.0,<3.0.0
+yfinance>=0.2.30,<1.0.0
+finance-datareader>=0.9.50,<1.0.0
+
+# Technical analysis
+ta>=0.10.2,<1.0.0
+
+# Visualization
+matplotlib>=3.7.0,<4.0.0
+plotly>=5.17.0,<6.0.0
+mplfinance>=0.12.0,<1.0.0
+
+# Web dashboard
+streamlit>=1.28.0,<2.0.0
+
+# Database
+sqlalchemy>=2.0.0,<3.0.0
+
+# Utilities
+python-dotenv>=1.0.0,<2.0.0
+requests>=2.31.0,<3.0.0
+tqdm>=4.66.0,<5.0.0
+pyyaml>=6.0.0,<7.0.0
+
+# Korean market data
+pykrx>=1.0.0,<2.0.0
+
+# Social trend
+pytrends>=4.9.0,<5.0.0
+
+# Real-time
+websockets>=13.0,<17.0
+
+# News & sentiment (light)
+beautifulsoup4>=4.12.0,<5.0.0
+feedparser>=6.0.10,<7.0.0
+textblob>=0.17.0,<1.0.0
+vaderSentiment>=3.3.2,<4.0.0
+
+# AI Chatbot
+google-genai>=1.0.0,<2.0.0
+
+# src/ 패키지를 import 가능하게 (sys.path 핵 없이)
 -e .
