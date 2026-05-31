@@ -104,8 +104,9 @@ class PyKRXGateway:
             logger.debug(f"[PyKRXGateway] Fetched {len(df_result)} days for {ticker}")
             return df_result
             
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(f"[PyKRXGateway] Failed to get investor trading for {ticker}: {e}", exc_info=True)
+        except Exception as e:
+            # pykrx 외부 라이브러리는 IndexError 등 예측 불가 예외를 던질 수 있음
+            logger.error("[PyKRXGateway] Failed to get investor trading for %s: %s", ticker, e, exc_info=True)
             return None
     
     def get_investor_summary(
@@ -219,8 +220,8 @@ class PyKRXGateway:
 
             return tickers
 
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(f"[PyKRXGateway] Failed to get tickers: {e}", exc_info=True)
+        except Exception as e:
+            logger.error("[PyKRXGateway] Failed to get tickers: %s", e, exc_info=True)
             return []
 
     def get_ticker_name_map(self) -> Dict[str, str]:
@@ -236,8 +237,8 @@ class PyKRXGateway:
             for t in kospi + kosdaq:
                 mapping[t] = stock.get_market_ticker_name(t)
             return mapping
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(f"[PyKRXGateway] Failed to build name map: {e}", exc_info=True)
+        except Exception as e:
+            logger.error("[PyKRXGateway] Failed to build name map: %s", e, exc_info=True)
             return {}
 
     def get_market_snapshot(self, market: str = "ALL", date: str = None) -> pd.DataFrame:
@@ -307,8 +308,8 @@ class PyKRXGateway:
 
                         result_dfs.append(cap_df)
 
-                except (ValueError, KeyError, TypeError) as mkt_err:
-                    logger.warning(f"[PyKRXGateway] Failed to fetch {mkt}: {mkt_err}")
+                except Exception as mkt_err:
+                    logger.warning("[PyKRXGateway] Failed to fetch %s: %s", mkt, mkt_err)
                     continue
 
             if not result_dfs:
@@ -417,8 +418,8 @@ class PyKRXGateway:
                         df.index.name = 'date'
                         return ticker, df
                     return ticker, None
-                except (ValueError, KeyError, TypeError) as e:
-                    logger.debug(f"[PyKRXGateway] OHLCV fetch failed for {ticker}: {e}")
+                except Exception as e:
+                    logger.debug("[PyKRXGateway] OHLCV fetch failed for %s: %s", ticker, e)
                     return ticker, None
 
             # ThreadPoolExecutor로 병렬 처리
@@ -508,7 +509,8 @@ class PyKRXGateway:
                         })
                         df.index.name = 'date'
                         result[ticker] = df
-                except (ValueError, KeyError, TypeError) as e:
+                except Exception as e:
+                    logger.debug("[PyKRXGateway] OHLCV batch fetch failed for ticker: %s", e)
                     failed_count += 1
                     continue
 
