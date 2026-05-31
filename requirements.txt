@@ -1,45 +1,22 @@
-# Core Dependencies
-pandas>=2.0.0
-numpy>=1.24.0
-yfinance>=0.2.30
-finance-datareader>=0.9.50
+# Base installation (dashboard + data collection + Korean market)
+# Run: pip install -e .
+#
+# With ML models:
+#   pip install -e ".[ml-boost]"       # XGBoost/LightGBM/CatBoost
+#   pip install -e ".[ml-torch]"       # Transformer + HuggingFace NLP
+#   pip install -e ".[ml-tf]"          # TensorFlow/Keras LSTM
+#   pip install -e ".[ml-all]"         # All ML
+#
+# With dev tools:
+#   pip install -e ".[dev]"
+#
+# Full install (everything):
+#   pip install -e ".[all]"
+#
+# Generate pinned lockfile (requires pip-tools):
+#   pip-compile pyproject.toml --output-file requirements-lock.txt
+#   pip-compile pyproject.toml --extra ml-all --output-file requirements-ml-lock.txt
 
-# Technical Analysis
-ta>=0.10.2
-
-# Machine Learning
-scikit-learn>=1.3.0
-xgboost>=2.0.0
-lightgbm>=4.0.0
-catboost>=1.2.0
-tensorflow>=2.14.0
-
-# Phase D: AI Chatbot (Gemini API)
-google-genai
-
-# Visualization
-matplotlib>=3.7.0
-plotly>=5.17.0
-mplfinance
-
-# Web Dashboard
-streamlit>=1.28.0
-
-# Database
-sqlalchemy>=2.0.0
-
-# Utilities
-python-dotenv>=1.0.0
-requests>=2.31.0
-tqdm>=4.66.0
-
-# Phase 2 - News & Sentiment Analysis
-beautifulsoup4>=4.12.0
-feedparser>=6.0.10
-textblob>=0.17.0
-vaderSentiment>=3.3.2
-transformers>=4.30.0
-torch
-
-# Phase 4 - Real-time Data
-websockets>=12.0
+# This file intentionally delegates to pyproject.toml.
+# All version constraints are defined there.
+-e .
