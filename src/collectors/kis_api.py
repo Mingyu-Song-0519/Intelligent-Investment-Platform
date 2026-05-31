@@ -50,7 +50,7 @@ class KisApi:
                         self.access_token = data['token']
                         self.token_expired = expired
                         logger.info("저장된 Access Token 로드 (만료: %s)", expired)
-        except Exception as e:
+        except (OSError, IOError, KeyError, ValueError) as e:
             logger.warning("토큰 로드 실패: %s", e)
 
     def save_token(self):
@@ -62,7 +62,7 @@ class KisApi:
             }
             with open(self.token_file, 'w') as f:
                 json.dump(data, f)
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning("토큰 저장 실패: %s", e)
 
     def get_access_token(self):
@@ -95,8 +95,8 @@ class KisApi:
             self.save_token()
             return self.access_token
             
-        except Exception as e:
-            logger.error(f"Access Token 발급 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError, KeyError) as e:
+            logger.error(f"Access Token 발급 실패: {e}", exc_info=True)
             # print(f"Response: {res.text}") # 403 에러 등의 경우 text 확인
             raise
 
@@ -118,8 +118,8 @@ class KisApi:
             data = res.json()
             logger.info("Approval Key 발급 성공")
             return data['approval_key']
-        except Exception as e:
-            logger.error(f"Approval Key 발급 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError, KeyError) as e:
+            logger.error(f"Approval Key 발급 실패: {e}", exc_info=True)
             raise
 
     def get_current_price(self, ticker):
@@ -161,8 +161,8 @@ class KisApi:
                 'open': int(output['stck_oprc']),
                 'timestamp': datetime.now()
             }
-        except Exception as e:
-            logger.error(f"현재가 조회 실패 ({ticker}): {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError, KeyError, ValueError) as e:
+            logger.error(f"현재가 조회 실패 ({ticker}): {e}", exc_info=True)
             return None
 
     def get_orderbook(self, ticker):
@@ -208,6 +208,6 @@ class KisApi:
                 'bid_volumes': bid_volumes,
                 'timestamp': datetime.now()
             }
-        except Exception as e:
-            logger.error(f"호가 조회 실패 ({ticker}): {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError, KeyError, ValueError) as e:
+            logger.error(f"호가 조회 실패 ({ticker}): {e}", exc_info=True)
             return None

@@ -3,8 +3,11 @@
 
 app.py에서 추출된 7개의 display_*_mini 함수를 제공합니다.
 """
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -53,6 +56,7 @@ def display_single_stock_analysis_mini(panel_id: str):
                     st.session_state[f'mini_name_{panel_id}'] = ticker_name
                     st.success(f"✅ {len(df)}개 데이터 로드 완료!")
             except Exception as e:
+                logger.error("단일 종목 데이터 로드 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     # 차트 표시
@@ -106,8 +110,8 @@ def display_multi_stock_comparison_mini(panel_id: str):
                     df = get_cached_stock_data(ticker, period)
                     if not df.empty:
                         data_dict[name] = df
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error("다중 종목 데이터 로드 오류 (%s): %s", ticker, e, exc_info=True)
             st.session_state[f'multi_data_{panel_id}'] = data_dict
             st.success(f"✅ {len(data_dict)}개 종목 로드 완료!")
 
@@ -162,6 +166,7 @@ def display_news_sentiment_mini(panel_id: str):
                 st.session_state[f'news_data_{panel_id}'] = news_df
                 st.success(f"✅ {len(news_df)}개 뉴스 수집!")
             except Exception as e:
+                logger.error("뉴스 수집 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     if f'news_data_{panel_id}' in st.session_state:
@@ -234,8 +239,8 @@ def display_ai_prediction_mini(panel_id: str):
                     key=f"ai_use_saved_{panel_id}",
                     help="재학습 없이 예측만 수행"
                 )
-        except Exception:
-            pass
+        except OSError as e:
+            logger.warning("저장된 모델 목록 조회 실패: %s", e)
 
     # Transformer 및 저장 옵션
     col_opt1, col_opt2, col_opt3 = st.columns(3)
@@ -302,13 +307,14 @@ def display_ai_prediction_mini(panel_id: str):
                     try:
                         safe_ticker = ticker_code.replace(":", "").replace("/", "").replace(".KS", "")
                         predictor.save_models(safe_ticker)
-                    except Exception:
-                        pass
+                    except (OSError, IOError) as e:
+                        logger.warning("모델 저장 실패: %s", e)
 
                 st.session_state[f'ai_result_{panel_id}'] = result
                 status.update(label="✅ 예측 완료!", state="complete", expanded=False)
                 st.success("✅ 예측 완료!")
             except Exception as e:
+                logger.error("AI 예측 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     if f'ai_result_{panel_id}' in st.session_state:
@@ -370,6 +376,7 @@ def display_backtest_mini(panel_id: str):
                 }
                 st.success(f"✅ 완료 (거래: {len(trades_df)}회)")
             except Exception as e:
+                logger.error("백테스트 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     if f'bt_result_{panel_id}' in st.session_state:
@@ -422,6 +429,7 @@ def display_portfolio_optimization_mini(panel_id: str):
                 st.session_state[f'port_result_{panel_id}'] = max_sharpe
                 st.success("✅ 최적화 완료!")
             except Exception as e:
+                logger.error("포트폴리오 최적화 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     if f'port_result_{panel_id}' in st.session_state:
@@ -458,6 +466,7 @@ def display_risk_management_mini(panel_id: str):
                 st.session_state[f'risk_result_{panel_id}'] = summary
                 st.success("✅ 분석 완료!")
             except Exception as e:
+                logger.error("리스크 분석 오류: %s", e, exc_info=True)
                 st.error(f"오류: {e}")
 
     if f'risk_result_{panel_id}' in st.session_state:

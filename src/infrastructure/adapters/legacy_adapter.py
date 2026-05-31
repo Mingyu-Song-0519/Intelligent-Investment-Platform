@@ -51,8 +51,8 @@ class LegacyCollectorAdapter(IStockRepository):
                 market=market
             )
             
-        except Exception as e:
-            logger.error(f"LegacyCollectorAdapter.get_stock_data: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"LegacyCollectorAdapter.get_stock_data: {e}", exc_info=True)
             return None
     
     def get_multiple_stocks(
@@ -85,8 +85,8 @@ class LegacyCollectorAdapter(IStockRepository):
                 "industry": info.get("industry"),
                 "market_cap": info.get("marketCap")
             }
-        except Exception as e:
-            logger.error(f"LegacyCollectorAdapter.get_stock_info: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"LegacyCollectorAdapter.get_stock_info: {e}", exc_info=True)
             return None
     
     def save_stock_data(self, stock: StockEntity) -> bool:
@@ -107,8 +107,8 @@ class LegacyCollectorAdapter(IStockRepository):
             
             return saved_count > 0
             
-        except Exception as e:
-            logger.error(f"LegacyCollectorAdapter.save_stock_data: {e}")
+        except (ValueError, OSError, IOError) as e:
+            logger.error(f"LegacyCollectorAdapter.save_stock_data: {e}", exc_info=True)
             return False
     
     def load_stock_data(
@@ -145,8 +145,8 @@ class LegacyCollectorAdapter(IStockRepository):
                 market=market
             )
             
-        except Exception as e:
-            logger.error(f"LegacyCollectorAdapter.load_stock_data: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"LegacyCollectorAdapter.load_stock_data: {e}", exc_info=True)
             return None
 
 
@@ -183,7 +183,7 @@ class LegacyNewsAdapter(INewsRepository):
             return articles[:max_results]
             
         except Exception as e:
-            logger.error(f"LegacyNewsAdapter.get_news: {e}")
+            logger.error(f"LegacyNewsAdapter.get_news: {e}", exc_info=True)
             return []
     
     def get_stock_news(
@@ -234,8 +234,8 @@ class LegacyAnalyzerAdapter:
                 "obv": latest.get("obv")
             }
             
-        except Exception as e:
-            logger.error(f"LegacyAnalyzerAdapter.analyze: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"LegacyAnalyzerAdapter.analyze: {e}", exc_info=True)
             return {}
     
     def get_signal(self, stock: StockEntity) -> SignalEntity:

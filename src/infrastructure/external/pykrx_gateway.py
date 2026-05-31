@@ -104,8 +104,8 @@ class PyKRXGateway:
             logger.debug(f"[PyKRXGateway] Fetched {len(df_result)} days for {ticker}")
             return df_result
             
-        except Exception as e:
-            logger.error(f"[PyKRXGateway] Failed to get investor trading for {ticker}: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[PyKRXGateway] Failed to get investor trading for {ticker}: {e}", exc_info=True)
             return None
     
     def get_investor_summary(
@@ -219,8 +219,8 @@ class PyKRXGateway:
 
             return tickers
 
-        except Exception as e:
-            logger.error(f"[PyKRXGateway] Failed to get tickers: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[PyKRXGateway] Failed to get tickers: {e}", exc_info=True)
             return []
 
     def get_ticker_name_map(self) -> Dict[str, str]:
@@ -236,8 +236,8 @@ class PyKRXGateway:
             for t in kospi + kosdaq:
                 mapping[t] = stock.get_market_ticker_name(t)
             return mapping
-        except Exception as e:
-            logger.error(f"[PyKRXGateway] Failed to build name map: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[PyKRXGateway] Failed to build name map: {e}", exc_info=True)
             return {}
 
     def get_market_snapshot(self, market: str = "ALL", date: str = None) -> pd.DataFrame:
@@ -301,13 +301,13 @@ class PyKRXGateway:
                                         right_on='티커',
                                         how='left'
                                     ).drop(columns=['티커'], errors='ignore')
-                        except Exception:
+                        except (KeyError, ValueError, TypeError):
                             # 등락률 없어도 OK
                             pass
 
                         result_dfs.append(cap_df)
 
-                except Exception as mkt_err:
+                except (ValueError, KeyError, TypeError) as mkt_err:
                     logger.warning(f"[PyKRXGateway] Failed to fetch {mkt}: {mkt_err}")
                     continue
 
@@ -323,7 +323,7 @@ class PyKRXGateway:
             return result
 
         except Exception as e:
-            logger.error(f"[PyKRXGateway] Market snapshot failed: {e}")
+            logger.error(f"[PyKRXGateway] Market snapshot failed: {e}", exc_info=True)
             return pd.DataFrame()
 
     def _get_last_trading_day(self) -> Optional[str]:
@@ -344,7 +344,7 @@ class PyKRXGateway:
                     return target
             return None
         except Exception as e:
-            logger.warning(f"[PyKRXGateway] Failed to detect last trading day (Possible IP Block): {e}")
+            logger.warning(f"[PyKRXGateway] Failed to detect last trading day (Possible IP Block): {e}", exc_info=True)
             return None
 
     def batch_get_investor_trading(self, tickers: List[str], days: int = 20) -> Dict[str, pd.DataFrame]:
@@ -417,7 +417,7 @@ class PyKRXGateway:
                         df.index.name = 'date'
                         return ticker, df
                     return ticker, None
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.debug(f"[PyKRXGateway] OHLCV fetch failed for {ticker}: {e}")
                     return ticker, None
 
@@ -441,7 +441,7 @@ class PyKRXGateway:
             return results
 
         except Exception as e:
-            logger.error(f"[PyKRXGateway] Parallel OHLCV failed: {e}")
+            logger.error(f"[PyKRXGateway] Parallel OHLCV failed: {e}", exc_info=True)
             return {}
 
     def batch_get_ohlcv(
@@ -508,7 +508,7 @@ class PyKRXGateway:
                         })
                         df.index.name = 'date'
                         result[ticker] = df
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     failed_count += 1
                     continue
 
@@ -521,7 +521,7 @@ class PyKRXGateway:
             return result
 
         except Exception as e:
-            logger.error(f"[PyKRXGateway] Batch OHLCV failed: {e}")
+            logger.error(f"[PyKRXGateway] Batch OHLCV failed: {e}", exc_info=True)
             return {}
 
     def fetch_ohlcv(
@@ -570,7 +570,7 @@ class PyKRXGateway:
             })
             return results
         except Exception as e:
-            logger.error(f"[PyKRXGateway] Fundamental fetch failed for {ticker}: {e}")
+            logger.error(f"[PyKRXGateway] Fundamental fetch failed for {ticker}: {e}", exc_info=True)
             return {}
 
 

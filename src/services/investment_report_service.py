@@ -56,7 +56,7 @@ class InvestmentReportService:
         try:
             return GeminiClient()
         except Exception as e:
-            logger.error(f"Failed to create GeminiClient: {e}")
+            logger.error(f"Failed to create GeminiClient: {e}", exc_info=True)
             # 폴백: MockLLMClient
             from src.infrastructure.external.gemini_client import MockLLMClient
             return MockLLMClient()
@@ -93,7 +93,7 @@ class InvestmentReportService:
             try:
                 profile = self.profile_repo.load(user_id)
             except Exception as e:
-                logger.warning(f"Failed to load profile for {user_id}: {e}")
+                logger.warning(f"Failed to load profile for {user_id}: {e}", exc_info=True)
         
         # 4. 프롬프트 구성
         prompt = self._build_analyst_prompt(
@@ -110,7 +110,7 @@ class InvestmentReportService:
             response = self.llm.generate(prompt)
             report = self._parse_response(ticker, stock_name, response)
         except Exception as e:
-            logger.error(f"AI generation failed for {ticker}: {e}")
+            logger.error(f"AI generation failed for {ticker}: {e}", exc_info=True)
             report = self._create_fallback_report(ticker, stock_name)
         
         # 6. 프로필 기반 후처리 (Phase 20)
@@ -130,16 +130,16 @@ class InvestmentReportService:
             try:
                 info = self.stock_repo.get_stock_info(ticker)
                 return info.get('name', ticker)
-            except Exception:
+            except (KeyError, AttributeError):
                 pass
-        
+
         # yfinance 폴백
         try:
             import yfinance as yf
             stock = yf.Ticker(ticker)
             info = stock.info
             return info.get('shortName', info.get('longName', ticker))
-        except Exception:
+        except (KeyError, AttributeError):
             return ticker
     
     def _normalize_ticker(self, ticker: str) -> str:
@@ -208,7 +208,7 @@ class InvestmentReportService:
                 'volume': hist['Volume'].iloc[-1],
                 'avg_volume': hist['Volume'].mean()
             }
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.warning(f"Failed to get technical data for {ticker}: {e}")
             return {}
     
@@ -224,7 +224,7 @@ class InvestmentReportService:
             )
             return features
         except Exception as e:
-            logger.warning(f"Failed to get sentiment data for {ticker}: {e}")
+            logger.warning(f"Failed to get sentiment data for {ticker}: {e}", exc_info=True)
             return None
     
     def _get_buzz_data(self, ticker: str) -> Optional[Dict[str, Any]]:
@@ -242,7 +242,7 @@ class InvestmentReportService:
                     'volatility_ratio': getattr(buzz_score_obj, 'volatility_ratio', 1.0)
                 }
         except Exception as e:
-            logger.debug(f"Failed to get buzz data for {ticker}: {e}")
+            logger.debug(f"Failed to get buzz data for {ticker}: {e}", exc_info=True)
         
         return None
     
@@ -363,7 +363,7 @@ class InvestmentReportService:
                     sectors_str = ", ".join(profile.preferred_sectors[:3])
                     prompt += f"[선호 섹터: {sectors_str}]\n\n"
                     
-            except Exception as e:
+            except (AttributeError, KeyError, TypeError) as e:
                 logger.debug(f"Failed to add profile to prompt: {e}")
         
         # 분석 요청
@@ -415,7 +415,7 @@ class InvestmentReportService:
             if reasoning_match:
                 reasoning = reasoning_match.group(1).strip()
                 
-        except Exception as e:
+        except (AttributeError, ValueError) as e:
             logger.warning(f"Failed to parse AI response: {e}")
         
         return InvestmentReport(
@@ -470,7 +470,7 @@ class InvestmentReportService:
                 report.profile_warning = "💡 이 종목은 안정적이지만 단기 수익률은 제한적일 수 있습니다."
                 report.profile_adjusted = True
                 
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             logger.debug(f"Failed to adjust for profile: {e}")
         
         return report

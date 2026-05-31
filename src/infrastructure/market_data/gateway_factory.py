@@ -15,10 +15,12 @@ from src.infrastructure.market_data.fallback_gateway import FallbackStockDataGat
 logger = logging.getLogger(__name__)
 
 
+# @MX:ANCHOR: 게이트웨이 생성 단일 진입점 — KR/US 분기 로직이 집중됨. 새 데이터 소스 추가 시 여기를 수정
+# @MX:REASON: [AUTO] market_data_service, fallback_gateway, 특성화 테스트 fan_in=5+
 class GatewayFactory:
     """
     시장별 데이터 게이트웨이 팩토리
-    
+
     각 시장에 최적화된 게이트웨이 우선순위로 생성합니다.
     """
     

@@ -104,7 +104,7 @@ class GeminiClient(ILLMClient):
                 
                 logger.info(f"[GeminiClient] Selected model: {self.selected_model_name}")
             except Exception as e:
-                logger.warning(f"[GeminiClient] Model selection failed, using default: {e}")
+                logger.warning(f"[GeminiClient] Model selection failed, using default: {e}", exc_info=True)
                 self.selected_model_name = 'gemini-2.0-flash'
             
             # 사용자 설정 모델 확인 (Streamlit Session State)
@@ -116,17 +116,17 @@ class GeminiClient(ILLMClient):
                     if preferred:
                         self.selected_model_name = preferred
                         logger.info(f"[GeminiClient] Overridden by session state: {self.selected_model_name}")
-            except Exception:
-                pass
-                
+            except Exception as e:
+                logger.debug(f"[GeminiClient] Session state model override failed: {e}")
+
             self._initialized = True
             logger.info(f"[GeminiClient] Initialized successfully with model: {self.selected_model_name}")
             
         except ImportError:
             logger.error("[GeminiClient] google-genai not installed")
         except Exception as e:
-            logger.error(f"[GeminiClient] Init failed: {e}")
-            raise # 에러를 상위로 전파하여 UI에서 보이게 함
+            logger.error(f"[GeminiClient] Init failed: {e}", exc_info=True)
+            raise  # 에러를 상위로 전파하여 UI에서 보이게 함
     
     def _load_api_key(self) -> Optional[str]:
         """API 키 로드 (Streamlit Secrets 또는 환경변수)"""
@@ -135,8 +135,8 @@ class GeminiClient(ILLMClient):
             import streamlit as st
             if hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
                 return st.secrets['GEMINI_API_KEY']
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[GeminiClient] Streamlit secrets unavailable: {e}")
         
         # 2. 환경변수
         import os
@@ -189,7 +189,7 @@ class GeminiClient(ILLMClient):
                     
                 return response.text
                 
-            except Exception as e:
+            except Exception as e:  # AI API가 다양한 예외를 던질 수 있음
                 error_str = str(e)
                 # 429 Rate Limit 에러 시 재시도
                 if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
@@ -229,7 +229,7 @@ class GeminiClient(ILLMClient):
             available.sort()
             return available
         except Exception as e:
-            logger.warning(f"[GeminiClient] Failed to list models: {e}")
+            logger.warning(f"[GeminiClient] Failed to list models: {e}", exc_info=True)
             return []
 
     def set_model(self, model_name: str):

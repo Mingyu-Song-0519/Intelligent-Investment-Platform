@@ -62,6 +62,7 @@ def get_cached_stock_data(ticker: str, period: str, _cache_version: int = 0) -> 
             collector = StockDataCollector()
             return collector.fetch_stock_data(ticker, period)
         except Exception as fallback_error:
+            logger.error("데이터 수집 오류: %s, Fallback 오류: %s", e, fallback_error, exc_info=True)
             st.error(f"데이터 수집 오류: {e}, Fallback 오류: {fallback_error}")
             return pd.DataFrame()
 
@@ -111,11 +112,12 @@ def get_cached_multi_stock_data(tickers: List[str], period: str) -> Dict[str, pd
                 else:
                     logger.warning(f"{ticker}: 빈 데이터")
                     
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"{ticker}: 데이터를 가져올 수 없습니다. ({e})")
                 continue
-                
+
     except Exception as e:
+        logger.error("다중 데이터 수집 오류: %s", e, exc_info=True)
         st.error(f"다중 데이터 수집 오류: {e}")
     
     logger.info(f"수집 완료: {len(result)}/{len(tickers)} 종목")
@@ -187,8 +189,8 @@ def get_cached_stock_listing_v3(market: str) -> Tuple[Dict[str, str], List[str]]
                 
                 logger.info(f"Loaded {len(stock_dict)} stocks from KRX KIND (after filtering)")
                 
-            except Exception as e:
-                logger.error(f"KIND listings failed: {e}")
+            except (OSError, IOError, ValueError) as e:
+                logger.error(f"KIND listings failed: {e}", exc_info=True)
                 import traceback
                 traceback.print_exc()
                 
@@ -200,7 +202,7 @@ def get_cached_stock_listing_v3(market: str) -> Tuple[Dict[str, str], List[str]]
         return stock_dict, list(stock_dict.keys())
     except Exception as e:
         import traceback
-        logger.error(f"종목 리스트 로딩 실패: {e}")
+        logger.error(f"종목 리스트 로딩 실패: {e}", exc_info=True)
         # traceback.print_exc() # Reduce noise
         return {}, []
 
@@ -224,6 +226,6 @@ def get_cached_exchange_rate() -> float:
         if rate is None:
             rate = usdkrw.history(period="1d")['Close'].iloc[-1]
         return float(rate)
-    except Exception as e:
-        logger.error(f"환율 데이터 수집 실패: {e}")
+    except (ValueError, KeyError, TypeError) as e:
+        logger.error(f"환율 데이터 수집 실패: {e}", exc_info=True)
         return 1350.0  # 기본값

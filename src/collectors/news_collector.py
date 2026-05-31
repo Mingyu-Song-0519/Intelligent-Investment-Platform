@@ -113,7 +113,7 @@ class NewsCollector:
                         with open(f"failed_page_{page}.html", "wb") as f:
                             f.write(response.content)
                         logger.debug(f"failed_page_{page}.html 저장됨")
-                    except Exception:
+                    except OSError:
                         pass
                     break
 
@@ -170,15 +170,15 @@ class NewsCollector:
                         news_list.append(news_item)
                         collected_titles.append(title)
 
-                    except Exception as e:
+                    except (KeyError, AttributeError, ValueError) as e:
                         logger.error(f"뉴스 아이템 처리 실패: {e}")
                         continue
 
                 # 페이지 간 Rate limiting (목록 요청만)
                 time.sleep(0.5)
 
-        except Exception as e:
-            logger.error(f"네이버 금융 뉴스 수집 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError) as e:
+            logger.error(f"네이버 금융 뉴스 수집 실패: {e}", exc_info=True)
 
         logger.info(f"네이버 금융에서 {len(news_list)}개 뉴스 수집 완료")
         return news_list
@@ -252,8 +252,8 @@ class NewsCollector:
                 'content': content[:1000] if content else ''  # 최대 1000자
             }
 
-        except Exception as e:
-            logger.error(f"뉴스 상세 정보 수집 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError, ValueError) as e:
+            logger.error(f"뉴스 상세 정보 수집 실패: {e}", exc_info=True)
             return {'date': None, 'content': ''}
 
     def fetch_google_news_rss(
@@ -307,14 +307,14 @@ class NewsCollector:
 
                     news_list.append(news_item)
 
-                except Exception as e:
+                except (KeyError, AttributeError, ValueError) as e:
                     logger.error(f"RSS 아이템 처리 실패: {e}")
                     continue
 
             logger.info(f"Google News에서 {len(news_list)}개 뉴스 수집 완료")
 
-        except Exception as e:
-            logger.error(f"Google News RSS 수집 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError) as e:
+            logger.error(f"Google News RSS 수집 실패: {e}", exc_info=True)
 
         return news_list
 
@@ -428,15 +428,15 @@ class NewsCollector:
                         if len(news_list) >= max_items:
                             break
                         
-                    except Exception as e:
+                    except (KeyError, AttributeError, ValueError) as e:
                         logger.error(f"RSS 아이템 처리 실패: {e}")
                         continue
-                
+
                 if len(news_list) >= max_items:
                     break
-                    
-            except Exception as e:
-                logger.error(f"{feed_info['name']} RSS 수집 실패: {e}")
+
+            except (requests.RequestException, ConnectionError, TimeoutError) as e:
+                logger.error(f"{feed_info['name']} RSS 수집 실패: {e}", exc_info=True)
                 continue
         
         logger.info(f"한국 언론사 RSS에서 {len(news_list)}개 뉴스 수집 완료 (종목: {company_name})")
@@ -493,14 +493,14 @@ class NewsCollector:
 
                     news_list.append(news_item)
 
-                except Exception as e:
+                except (KeyError, AttributeError, ValueError) as e:
                     logger.error(f"Yahoo RSS 아이템 처리 실패: {e}")
                     continue
 
             logger.info(f"Yahoo Finance에서 {len(news_list)}개 뉴스 수집 완료")
 
-        except Exception as e:
-            logger.error(f"Yahoo Finance RSS 수집 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError) as e:
+            logger.error(f"Yahoo Finance RSS 수집 실패: {e}", exc_info=True)
 
         return news_list
 
@@ -555,14 +555,14 @@ class NewsCollector:
 
                     news_list.append(news_item)
 
-                except Exception as e:
+                except (KeyError, AttributeError, ValueError) as e:
                     logger.error(f"RSS 아이템 처리 실패: {e}")
                     continue
 
             logger.info(f"Google News (EN)에서 {len(news_list)}개 뉴스 수집 완료")
 
-        except Exception as e:
-            logger.error(f"Google News (EN) RSS 수집 실패: {e}")
+        except (requests.RequestException, ConnectionError, TimeoutError) as e:
+            logger.error(f"Google News (EN) RSS 수집 실패: {e}", exc_info=True)
 
         return news_list
 
@@ -662,7 +662,7 @@ class NewsCollector:
                         saved_count += 1
 
                 except Exception as e:
-                    logger.error(f"뉴스 저장 실패: {e}")
+                    logger.error(f"뉴스 저장 실패: {e}", exc_info=True)
                     continue
 
             conn.commit()

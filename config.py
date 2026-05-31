@@ -5,6 +5,17 @@ Stock Market Analysis & Prediction System - Configuration
 import os
 from pathlib import Path
 
+
+def _load_tickers_yaml(path: Path) -> dict:
+    """data/tickers.yaml에서 종목 목록 로드 (S2: 비개발자 편집 가능)"""
+    try:
+        import yaml
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return data
+    except Exception:
+        return {}
+
 # =============================================================================
 # 프로젝트 경로 설정
 # =============================================================================
@@ -19,10 +30,12 @@ MODELS_DIR = BASE_DIR / "src" / "models" / "saved_models"  # 저장된 모델 �
 DATABASE_PATH = DATA_DIR / "stock_data.db"
 
 # =============================================================================
-# 주식 데이터 설정
+# 주식 데이터 설정 (S2: data/tickers.yaml에서 로드, 파일 없으면 기본값)
 # =============================================================================
-# 기본 분석 대상 종목
-DEFAULT_TICKERS = {
+_TICKERS_YAML = DATA_DIR / "tickers.yaml"
+_yaml_data = _load_tickers_yaml(_TICKERS_YAML)
+
+DEFAULT_TICKERS: dict = _yaml_data.get("korean") or {
     "삼성전자": "005930.KS",
     "SK하이닉스": "000660.KS",
     "NAVER": "035420.KS",
@@ -30,8 +43,7 @@ DEFAULT_TICKERS = {
     "현대차": "005380.KS",
 }
 
-# 해외 주요 종목
-US_TICKERS = {
+US_TICKERS: dict = _yaml_data.get("us") or {
     "Apple": "AAPL",
     "Microsoft": "MSFT",
     "Google": "GOOGL",

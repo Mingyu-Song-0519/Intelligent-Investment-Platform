@@ -133,8 +133,8 @@ class YFinanceStockRepository(IStockRepository):
             
             return stock
             
-        except Exception as e:
-            logger.error(f"YFinanceStockRepository.get_stock_data: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"YFinanceStockRepository.get_stock_data: {e}", exc_info=True)
             return None
     
     def get_multiple_stocks(
@@ -175,8 +175,8 @@ class YFinanceStockRepository(IStockRepository):
                 "description": info.get("longBusinessSummary")
             }
             
-        except Exception as e:
-            logger.error(f"YFinanceStockRepository.get_stock_info: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"YFinanceStockRepository.get_stock_info: {e}", exc_info=True)
             return None
     
     def clear_cache(self):
@@ -202,7 +202,7 @@ class YFinanceStockRepository(IStockRepository):
             return True
             
         except Exception as e:
-            logger.error(f"YFinanceStockRepository.save_stock_data: {e}")
+            logger.error(f"YFinanceStockRepository.save_stock_data: {e}", exc_info=True)
             return False
     
     def _save_to_database(self, stock: StockEntity) -> bool:
@@ -231,7 +231,7 @@ class YFinanceStockRepository(IStockRepository):
                     ))
                     saved_count += 1
                 except Exception as e:
-                    logger.error(f"DB 저장 실패 ({date}): {e}")
+                    logger.error(f"DB 저장 실패 ({date}): {e}", exc_info=True)
             
             # 종목 정보 저장
             try:
@@ -247,7 +247,7 @@ class YFinanceStockRepository(IStockRepository):
                     stock.market_cap
                 ))
             except Exception as e:
-                logger.error(f"종목 정보 저장 실패: {e}")
+                logger.error(f"종목 정보 저장 실패: {e}", exc_info=True)
             
             conn.commit()
         
@@ -308,7 +308,7 @@ class YFinanceStockRepository(IStockRepository):
             return self.get_stock_data(ticker)
             
         except Exception as e:
-            logger.error(f"YFinanceStockRepository.load_stock_data: {e}")
+            logger.error(f"YFinanceStockRepository.load_stock_data: {e}", exc_info=True)
             return None
     
     def _load_from_database(
@@ -370,7 +370,7 @@ class YFinanceStockRepository(IStockRepository):
             return stock
             
         except Exception as e:
-            logger.error(f"DB 로드 실패: {e}")
+            logger.error(f"DB 로드 실패: {e}", exc_info=True)
             return None
 
 

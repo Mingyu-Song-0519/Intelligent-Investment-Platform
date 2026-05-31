@@ -212,7 +212,7 @@ class EnsemblePredictor:
                 next_price = df.iloc[i+window_size+1]['close']
                 actual_directions.append(1 if next_price > actual_price else 0)
 
-            except Exception as e:
+            except (ValueError, KeyError, TypeError):
                 continue
 
         if len(lstm_predictions) < 10:
@@ -265,7 +265,7 @@ class EnsemblePredictor:
             try:
                 transformer_pred = self.transformer_predictor.predict(df)
                 predictions['transformer'] = float(transformer_pred)
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.warning(f"Transformer 예측 실패: {e}")
 
         # 앙상블 전략에 따른 최종 예측
@@ -548,14 +548,14 @@ class EnsemblePredictor:
             if self.lstm_predictor is None:
                 self.lstm_predictor = LSTMPredictor()
             self.lstm_predictor.load(f"{prefix}_lstm")
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"LSTM 모델 로드 실패: {e}")
 
         try:
             if self.xgboost_classifier is None:
                 self.xgboost_classifier = XGBoostClassifier()
             self.xgboost_classifier.load(f"{prefix}_xgboost")
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"XGBoost 모델 로드 실패: {e}")
 
         try:
@@ -563,7 +563,7 @@ class EnsemblePredictor:
                 if self.transformer_predictor is None:
                     self.transformer_predictor = TransformerPredictor()
                 self.transformer_predictor.load_model(f"{prefix}_transformer.keras")
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"Transformer 모델 로드 실패: {e}")
 
         logger.info(f"앙상블 모델 로드 완료: {prefix}")
@@ -693,7 +693,7 @@ class EnsemblePredictor:
                     if len(y_pred) == len(actual_direction):
                         acc = (y_pred == actual_direction.values).mean()
                         results['lstm'] = float(acc)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"LSTM 평가 실패: {e}")
 
         # XGBoost 평가
@@ -705,7 +705,7 @@ class EnsemblePredictor:
                     if len(y_pred) == len(actual_direction):
                         acc = (y_pred == actual_direction.values).mean()
                         results['xgboost'] = float(acc)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"XGBoost 평가 실패: {e}")
 
         # Transformer 평가
@@ -717,7 +717,7 @@ class EnsemblePredictor:
                     if len(y_pred) == len(actual_direction):
                         acc = (y_pred == actual_direction.values).mean()
                         results['transformer'] = float(acc)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"Transformer 평가 실패: {e}")
 
         logger.info(f"모델 평가 결과: {results}")

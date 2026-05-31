@@ -67,10 +67,12 @@ class OHLCV:
         return len(self.data) if self.data is not None else 0
 
 
+# @MX:ANCHOR: 헥사고날 아키텍처 핵심 포트 — 모든 데이터 소스가 이 인터페이스를 구현
+# @MX:REASON: [AUTO] Yahoo, PyKRX, KIS 게이트웨이 3개 구현체 + FallbackGateway 의존. fan_in=4+
 class IStockDataGateway(ABC):
     """
     주식 데이터 게이트웨이 인터페이스 (DIP)
-    
+
     모든 데이터 소스 구현체는 이 인터페이스를 구현해야 합니다.
     Application Layer는 이 인터페이스에만 의존합니다.
     """
@@ -126,6 +128,8 @@ class IStockDataGateway(ABC):
         return True  # 기본값: 모든 티커 지원
 
 
+# @MX:ANCHOR: 캐시 레이어 포트 — SQLiteMarketDataCache가 유일 구현체. 교체 시 이 인터페이스 유지
+# @MX:REASON: [AUTO] market_data_service, fallback_gateway 등 다수 호출. fan_in=3+
 class IMarketDataCache(ABC):
     """
     시장 데이터 캐시 인터페이스

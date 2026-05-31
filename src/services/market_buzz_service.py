@@ -107,7 +107,7 @@ class MarketBuzzService:
                 if '.KS' in ticker or '.KQ' in ticker:
                     name = self._get_kr_stock_name(ticker)
                     
-        except Exception as e:
+        except (KeyError, AttributeError, TypeError) as e:
             logger.debug(f"[StockName] yfinance failed for {ticker}: {e}")
             # 한국 주식 폴백
             if '.KS' in ticker or '.KQ' in ticker:
@@ -246,8 +246,8 @@ class MarketBuzzService:
                 last_updated=datetime.now()
             )
             
-        except Exception as e:
-            logger.error(f"[BuzzScore] Failed to calculate for {ticker}: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[BuzzScore] Failed to calculate for {ticker}: {e}", exc_info=True)
             return None
     
     # ===== Volume Anomaly Detection =====
@@ -306,7 +306,7 @@ class MarketBuzzService:
                 if volume_ratio > 1.2:
                     anomalies.append(anomaly)
                     
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"[VolumeAnomaly] Failed for {ticker}: {e}")
                 continue
         
@@ -351,7 +351,7 @@ class MarketBuzzService:
             return heatmap
             
         except Exception as e:
-            logger.error(f"[Heatmap] Failed for {market}: {e}")
+            logger.error(f"[Heatmap] Failed for {market}: {e}", exc_info=True)
             # Graceful Degradation: stale cache 반환
             stale = self._get_stale_cache(cache_key)
             return stale if stale else []
@@ -367,7 +367,7 @@ class MarketBuzzService:
                 if sector_heat:
                     heatmap.append(sector_heat)
             except Exception as e:
-                logger.warning(f"[Heatmap] Failed to calculate {sector_name}: {e}")
+                logger.warning(f"[Heatmap] Failed to calculate {sector_name}: {e}", exc_info=True)
                 continue
         
         # 정렬 (avg_change_pct 높은 순)
@@ -405,7 +405,7 @@ class MarketBuzzService:
                         "name": name,
                         "change_pct": change_pct
                     })
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     # 실패 종목 추적
                     if ticker not in self._failed_tickers:
                         self._failed_tickers.append(ticker)
@@ -434,8 +434,8 @@ class MarketBuzzService:
                 stock_count=len(tickers)
             )
             
-        except Exception as e:
-            logger.error(f"[SectorHeat] Failed for {sector_name}: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[SectorHeat] Failed for {sector_name}: {e}", exc_info=True)
             return None
     
     # ===== Top Buzz Stocks =====
@@ -486,7 +486,7 @@ class MarketBuzzService:
             return top_buzz
             
         except Exception as e:
-            logger.error(f"[TopBuzz] Failed for {market}: {e}")
+            logger.error(f"[TopBuzz] Failed for {market}: {e}", exc_info=True)
             return self._get_stale_cache(cache_key) or []
     
     # ===== Caching Helpers =====

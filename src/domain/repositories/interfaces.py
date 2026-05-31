@@ -10,10 +10,12 @@ from datetime import datetime
 from src.domain.entities.stock import StockEntity, PortfolioEntity, SignalEntity
 
 
+# @MX:ANCHOR: 종목 데이터 도메인 포트 — Strangler Fig 마이그레이션 핵심 계약 인터페이스
+# @MX:REASON: [AUTO] LegacyCollectorAdapter, screener_service, watchlist_service 등 fan_in=5+
 class IStockRepository(ABC):
     """
     종목 데이터 Repository 인터페이스
-    
+
     구현체 예시:
     - YFinanceStockRepository: yfinance API 사용
     - KISStockRepository: 한국투자증권 API 사용

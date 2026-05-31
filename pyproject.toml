@@ -42,6 +42,8 @@ dependencies = [
     "vaderSentiment>=3.3.2,<4.0.0",
     # AI Chatbot
     "google-genai>=1.0.0,<2.0.0",
+    # Config file support
+    "pyyaml>=6.0.0,<7.0.0",
 ]
 
 # --- Optional extras (install as needed) ---

@@ -94,7 +94,7 @@ class SectorRepository:
             return sectors
             
         except Exception as e:
-            logger.error(f"[SectorRepo] Failed to fetch sectors for {market}: {e}")
+            logger.error(f"[SectorRepo] Failed to fetch sectors for {market}: {e}", exc_info=True)
             # Graceful Degradation: Stale cache 반환
             return self._get_stale_cache(market)
     
@@ -167,7 +167,7 @@ class SectorRepository:
                 if len(sectors_map) % 50 == 0:
                     logger.info(f"[US Sectors] Processed {len(sectors_map)} tickers...")
                     
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.warning(f"[US Sectors] Failed to fetch {ticker}: {e}")
                 failed_tickers.append(ticker)
                 continue
@@ -193,8 +193,8 @@ class SectorRepository:
             tables = pd.read_html(url)
             df = tables[0]
             return df['Symbol'].str.replace('.', '-').tolist()
-        except Exception as e:
-            logger.error(f"[US Sectors] Failed to fetch S&P 500 list: {e}")
+        except (OSError, IOError, ValueError) as e:
+            logger.error(f"[US Sectors] Failed to fetch S&P 500 list: {e}", exc_info=True)
             # Fallback: 주요 종목만 반환
             return self._get_major_us_tickers()
     
@@ -341,7 +341,7 @@ class SectorRepository:
                 return None
             
             return cached['data']
-        except Exception as e:
+        except (OSError, IOError, ValueError, KeyError) as e:
             logger.warning(f"[SectorRepo] Failed to load file cache for {market}: {e}")
             return None
     
@@ -355,8 +355,8 @@ class SectorRepository:
                     'data': data
                 }, f, ensure_ascii=False, indent=2)
             logger.info(f"[SectorRepo] Saved file cache for {market}")
-        except Exception as e:
-            logger.error(f"[SectorRepo] Failed to save file cache for {market}: {e}")
+        except (OSError, IOError) as e:
+            logger.error(f"[SectorRepo] Failed to save file cache for {market}: {e}", exc_info=True)
     
     def _get_stale_cache(self, market: str) -> Dict[str, List[str]]:
         """
@@ -377,8 +377,8 @@ class SectorRepository:
                     cached = json.load(f)
                 logger.warning(f"[SectorRepo] Using stale file cache for {market}")
                 return cached['data']
-            except Exception as e:
-                logger.error(f"[SectorRepo] Failed to load stale cache: {e}")
+            except (OSError, IOError, ValueError, KeyError) as e:
+                logger.error(f"[SectorRepo] Failed to load stale cache: {e}", exc_info=True)
         
         # 3. 최후의 수단: Fallback 하드코딩 데이터
         logger.error(f"[SectorRepo] All caches failed. Using fallback for {market}")

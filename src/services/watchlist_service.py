@@ -147,7 +147,7 @@ class WatchlistService:
             try:
                 profile = self.profile_repo.load(user_id)
             except Exception as e:
-                logger.warning(f"Failed to load profile for {user_id}: {e}")
+                logger.warning(f"Failed to load profile for {user_id}: {e}", exc_info=True)
         
         # 병렬로 가격 데이터 조회
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -169,7 +169,7 @@ class WatchlistService:
                         summaries.append(summary)
                 except Exception as e:
                     item = future_to_item[future]
-                    logger.error(f"Failed to get summary for {item.ticker}: {e}")
+                    logger.error(f"Failed to get summary for {item.ticker}: {e}", exc_info=True)
                     # 에러 시 기본값
                     summaries.append(self._create_fallback_summary(item))
         
@@ -216,7 +216,7 @@ class WatchlistService:
                         buzz_score = buzz.base_score
                         heat_level = HeatLevel(buzz.heat_level) if hasattr(buzz, 'heat_level') else None
                 except Exception as e:
-                    logger.debug(f"Buzz calculation failed for {item.ticker}: {e}")
+                    logger.debug(f"Buzz calculation failed for {item.ticker}: {e}", exc_info=True)
             
             # 거래량 급등 확인
             volume_anomaly = self._check_volume_anomaly(item.ticker, price_data)
@@ -237,7 +237,7 @@ class WatchlistService:
             )
             
         except Exception as e:
-            logger.error(f"Error creating summary for {item.ticker}: {e}")
+            logger.error(f"Error creating summary for {item.ticker}: {e}", exc_info=True)
             return self._create_fallback_summary(item)
     
     def _create_fallback_summary(self, item: WatchlistItem) -> WatchlistSummary:
@@ -300,7 +300,7 @@ class WatchlistService:
             
             return data
             
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.warning(f"Failed to get price for {ticker}: {e}")
             return None
     
@@ -442,7 +442,7 @@ class WatchlistService:
             
             return min(100, max(0, score))
             
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             logger.warning(f"Profile fit calculation failed for {ticker}: {e}")
             return 70.0  # 에러 시 중립적 점수
     
@@ -464,7 +464,7 @@ class WatchlistService:
             elif fit_score < 60:
                 return f"💡 {profile_type} 투자자는 신중한 검토가 필요합니다."
 
-        except Exception as e:
+        except (AttributeError, KeyError) as e:
             logger.debug(f"Profile fit message generation failed: {e}")
         
         return None

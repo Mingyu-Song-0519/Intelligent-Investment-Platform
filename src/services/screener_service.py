@@ -174,7 +174,7 @@ class ScreenerService:
                     return []
                 logger.info(f"[Screener] Stage 2 YFinance Fallback: Successfully fetched {len(ohlcv_dict)} stocks")
             except Exception as e:
-                logger.error(f"[Screener] YFinance fallback failed: {e}")
+                logger.error(f"[Screener] YFinance fallback failed: {e}", exc_info=True)
                 return []
         
         logger.info(f"[Screener] Stage 2: Data ready for {len(ohlcv_dict)} stocks. Starting calculation...")
@@ -306,8 +306,8 @@ class ScreenerService:
             
             # 수급 점수 (20점)
             if streak: score += 20
-        except Exception as e:
-            logger.error(f"[Screener] Error during score calculation for {data.get('ticker')}: {e}")
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(f"[Screener] Error during score calculation for {data.get('ticker')}: {e}", exc_info=True)
             # 에러 발생 시 최하 점수 부여
             score = 5
         
@@ -403,7 +403,7 @@ class ScreenerService:
                     stock_data['institution_streak'] = institution_streak
                     filtered.append(stock_data)
                     
-            except Exception as e:
+            except (ValueError, KeyError, TypeError) as e:
                 logger.debug(f"[Screener] Failed to filter {ticker}: {e}")
                 continue
         
@@ -472,7 +472,7 @@ class ScreenerService:
                 'pbr': info.get('priceToBook'),
             }
             
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             logger.debug(f"[Screener] Data fetch failed for {ticker}: {e}")
             return None
     
@@ -578,7 +578,7 @@ class ScreenerService:
                 recommendations.append(recommendation)
                 
             except Exception as e:
-                logger.debug(f"[Screener] AI score failed for {ticker}: {e}")
+                logger.debug(f"[Screener] AI score failed for {ticker}: {e}", exc_info=True)
                 continue
         
         # AI 점수 내림차순 정렬
@@ -630,7 +630,7 @@ class ScreenerService:
             
             logger.debug(f"[Screener] Personalized for risk_value={risk_value}")
             
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             logger.debug(f"[Screener] Personalization failed: {e}")
         
         return recommendations
