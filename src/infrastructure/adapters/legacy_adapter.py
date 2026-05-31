@@ -51,8 +51,9 @@ class LegacyCollectorAdapter(IStockRepository):
                 market=market
             )
             
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(f"LegacyCollectorAdapter.get_stock_data: {e}", exc_info=True)
+        except Exception as e:
+            # 레거시 어댑터는 모든 예외를 삼킴 — 특성화 테스트가 이 계약을 보호
+            logger.error("LegacyCollectorAdapter.get_stock_data: %s", e, exc_info=True)
             return None
     
     def get_multiple_stocks(
@@ -107,8 +108,9 @@ class LegacyCollectorAdapter(IStockRepository):
             
             return saved_count > 0
             
-        except (ValueError, OSError, IOError) as e:
-            logger.error(f"LegacyCollectorAdapter.save_stock_data: {e}", exc_info=True)
+        except Exception as e:
+            # 레거시 어댑터는 모든 예외를 삼킴 — 특성화 테스트가 이 계약을 보호
+            logger.error("LegacyCollectorAdapter.save_stock_data: %s", e, exc_info=True)
             return False
     
     def load_stock_data(
