@@ -6,12 +6,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 import sqlite3
-import sys
-from pathlib import Path
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import DATABASE_PATH, DEFAULT_PERIOD, DEFAULT_INTERVAL, DATA_DIR
 

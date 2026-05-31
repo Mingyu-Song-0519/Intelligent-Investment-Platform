@@ -4,12 +4,6 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Tuple
-import sys
-from pathlib import Path
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import INDICATOR_PARAMS
 
@@ -102,9 +96,10 @@ class TechnicalAnalyzer:
         avg_gain = gain.rolling(window=period).mean()
         avg_loss = loss.rolling(window=period).mean()
         
-        rs = avg_gain / avg_loss
+        rs = avg_gain / avg_loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
-        
+        rsi = rsi.fillna(100.0)
+
         return rsi
     
     def add_rsi(self, period: int = None) -> 'TechnicalAnalyzer':
@@ -188,8 +183,8 @@ class TechnicalAnalyzer:
         std_dev = std_dev or params['std']
         
         middle = self.df[self.price_col].rolling(window=period).mean()
-        std = self.df[self.price_col].rolling(window=period).std()
-        
+        std = self.df[self.price_col].rolling(window=period).std().fillna(0)
+
         upper = middle + (std * std_dev)
         lower = middle - (std * std_dev)
         
@@ -203,9 +198,11 @@ class TechnicalAnalyzer:
         self.df['bb_lower'] = lower
         
         # %B 지표 (가격 위치)
+        # 분모가 0인 경우(볼린저 밴드 폭이 0인 경우) 방지
+        bb_width = upper - lower
         self.df['bb_percent'] = (
-            (self.df[self.price_col] - lower) / (upper - lower)
-        )
+            (self.df[self.price_col] - lower) / bb_width.replace(0, np.nan)
+        ).fillna(0.5)  # 폭이 0이면 중간값(0.5)으로 처리
         
         return self
     

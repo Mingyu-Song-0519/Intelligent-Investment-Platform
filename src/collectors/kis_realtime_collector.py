@@ -7,7 +7,6 @@ import json
 import logging
 import time
 from typing import Dict, Optional, Callable, List
-from pathlib import Path
 import sys
 from datetime import datetime
 import os
@@ -19,16 +18,8 @@ except ImportError:
     print("[ERROR] websockets 라이브러리가 필요합니다: pip install websockets")
     sys.exit(1)
 
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 # KIS REST API 모듈 사용
-try:
-    from src.collectors.kis_api import KisApi
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).parent))
-    from kis_api import KisApi
+from src.collectors.kis_api import KisApi
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,7 +58,6 @@ class KISRealtimeCollector:
         self.quote_callback: Optional[Callable] = None
         
         # 최근 데이터
-        self.latest_prices = {}
         self.latest_prices = {}
         self.latest_quotes = {}
 

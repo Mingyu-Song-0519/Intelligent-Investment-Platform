@@ -4,12 +4,6 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict, List, Any
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import MODELS_DIR
 from src.backtest.strategies import BaseStrategy
@@ -60,13 +54,22 @@ class Backtester:
     def run(self, strategy: BaseStrategy) -> Dict[str, Any]:
         """
         백테스팅 실행
-        
+
         Args:
             strategy: 매매 전략 객체
-            
+
         Returns:
             백테스팅 결과 딕셔너리
         """
+        if self.df.empty:
+            return {
+                'strategy_name': strategy.name,
+                'equity': pd.Series(),
+                'trades': [],
+                'final_capital': self.initial_capital,
+                'buy_hold_equity': pd.Series(),
+                'buy_hold_final': self.initial_capital
+            }
         # 시그널 생성
         signals = strategy.generate_signals(self.df)
         

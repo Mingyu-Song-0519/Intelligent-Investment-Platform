@@ -6,11 +6,6 @@ import pandas as pd
 from typing import Tuple, Optional, Dict, Any
 from pathlib import Path
 import pickle
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import MODEL_CONFIG, MODELS_DIR
 
@@ -407,7 +402,11 @@ class LSTMPredictor:
              temp_scaler = MinMaxScaler(feature_range=(0, 1))
              scaled_data = temp_scaler.fit_transform(data)
 
-        X = scaled_data.reshape(1, self.sequence_length, -1)
+        n_features = scaled_data.shape[1] if len(scaled_data.shape) > 1 else 1
+        if len(scaled_data) < self.sequence_length:
+            raise ValueError(f"데이터 부족: {len(scaled_data)} (필요: {self.sequence_length})")
+        scaled_data = scaled_data[-self.sequence_length:]
+        X = scaled_data.reshape(1, self.sequence_length, n_features)
         prediction = self.model.predict(X, verbose=0)
         
         return self.preprocessor.inverse_transform(prediction.flatten())

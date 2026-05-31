@@ -5,12 +5,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from scipy import stats
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class RiskManager:
@@ -91,9 +85,18 @@ class RiskManager:
         Returns:
             VaR 결과 딕셔너리
         """
+        if len(self.returns) == 0:
+            return {
+                'method': 'Parametric',
+                'confidence': confidence,
+                'horizon_days': horizon,
+                'var_return': 0.0,
+                'var_amount': 0.0
+            }
+
         mean = self.returns.mean()
         std = self.returns.std()
-        
+
         # Z-score 계산
         z_score = stats.norm.ppf(1 - confidence)
         
@@ -132,9 +135,18 @@ class RiskManager:
         Returns:
             VaR 결과 딕셔너리
         """
+        if len(self.returns) == 0:
+            return {
+                'method': 'Monte Carlo',
+                'confidence': confidence,
+                'horizon_days': horizon,
+                'var_return': 0.0,
+                'var_amount': 0.0
+            }
+
         mean = self.returns.mean()
         std = self.returns.std()
-        
+
         # 시뮬레이션
         simulated_returns = np.random.normal(mean, std, simulations)
         

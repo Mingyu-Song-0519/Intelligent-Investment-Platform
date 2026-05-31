@@ -4,12 +4,6 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class PerformanceMetrics:
@@ -38,16 +32,20 @@ class PerformanceMetrics:
     
     def total_return(self) -> float:
         """총 수익률"""
+        if self.equity_curve.empty:
+            return 0.0
         return (self.equity_curve.iloc[-1] - self.initial_capital) / self.initial_capital
     
     def cagr(self) -> float:
         """연환산 수익률 (CAGR)"""
+        if self.equity_curve.empty:
+            return 0.0
         total_days = len(self.equity_curve)
         years = total_days / 252  # 거래일 기준
-        
+
         if years <= 0:
             return 0.0
-        
+
         total_return = self.equity_curve.iloc[-1] / self.initial_capital
         return (total_return ** (1 / years)) - 1
     
@@ -183,6 +181,8 @@ class PerformanceMetrics:
     
     def get_all_metrics(self, trades_df: Optional[pd.DataFrame] = None) -> Dict:
         """모든 지표를 딕셔너리로 반환"""
+        if self.equity_curve.empty:
+            return {}
         metrics = {
             # 수익성
             'total_return': self.total_return(),

@@ -5,12 +5,6 @@ import pandas as pd
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 
 class BaseStrategy(ABC):

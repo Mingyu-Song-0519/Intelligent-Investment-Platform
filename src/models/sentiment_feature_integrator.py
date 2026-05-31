@@ -10,11 +10,6 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 import warnings
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # 새 Service Layer import
 from src.services.sentiment_analysis_service import SentimentAnalysisService

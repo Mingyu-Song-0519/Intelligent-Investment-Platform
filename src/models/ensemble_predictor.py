@@ -5,12 +5,6 @@ AI 모델 앙상블 전략 - LSTM + XGBoost + Transformer 결합 예측
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Any
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import ENSEMBLE_CONFIG
 from src.models.predictor import LSTMPredictor, XGBoostClassifier, DataPreprocessor
@@ -366,8 +360,12 @@ class EnsemblePredictor:
                 weighted_sum += predictions['rule_based'] * self.weights.get('rule_based', 0.2)
                 total_weight += self.weights.get('rule_based', 0.2)
 
-            final_prediction = 1 if (weighted_sum / total_weight) > 0.5 else 0
-            confidence = weighted_sum / total_weight if final_prediction == 1 else 1 - weighted_sum / total_weight
+            if total_weight == 0:
+                final_prediction = 0
+                confidence = 0.5
+            else:
+                final_prediction = 1 if (weighted_sum / total_weight) > 0.5 else 0
+                confidence = weighted_sum / total_weight if final_prediction == 1 else 1 - weighted_sum / total_weight
 
         result = {
             'individual_predictions': predictions,
@@ -404,6 +402,8 @@ class EnsemblePredictor:
         
         # 가중 평균 계산
         total_weight = sum(weights)
+        if total_weight == 0:
+            return None, 0.0
         ensemble_pred = sum(p * w for p, w in zip(price_predictions, weights)) / total_weight
         
         # 신뢰도 계산

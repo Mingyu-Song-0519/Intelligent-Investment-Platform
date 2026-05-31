@@ -8,14 +8,8 @@ import sqlite3
 import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from pathlib import Path
-import sys
 from urllib.parse import quote, urljoin
 import re
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import DATABASE_PATH
 
@@ -116,7 +110,7 @@ class NewsCollector:
                         with open(f"failed_page_{page}.html", "wb") as f:
                             f.write(response.content)
                         print(f"[DEBUG] failed_page_{page}.html 저장됨")
-                    except:
+                    except Exception:
                         pass
                     break
 
@@ -314,6 +308,131 @@ class NewsCollector:
 
         return news_list
 
+    def fetch_korean_press_rss(
+        self,
+        company_name: str,
+        max_items: int = 30
+    ) -> List[Dict]:
+        """
+        한국 주요 언론사 RSS에서 경제/증권 뉴스를 수집하고 종목명으로 필터링합니다.
+        
+        지원 언론사:
+        - 매일경제 (증권 섹션)
+        - 연합뉴스 (경제 섹션)
+        - 한국경제
+
+        Args:
+            company_name: 회사명 (필터링용, 예: '삼성전자')
+            max_items: 수집할 최대 뉴스 수
+
+        Returns:
+            뉴스 리스트
+        """
+        news_list = []
+        
+        # 한국 주요 언론사 경제/증권 RSS 피드
+        rss_feeds = [
+            {
+                'name': '매일경제 증권',
+                'url': 'https://www.mk.co.kr/rss/50200011/',  # 증권 섹션
+                'source': 'maeil_economy'
+            },
+            {
+                'name': '매일경제 경제',
+                'url': 'https://www.mk.co.kr/rss/30000001/',  # 경제 섹션
+                'source': 'maeil_economy'
+            },
+            {
+                'name': '연합뉴스 경제',
+                'url': 'https://www.yna.co.kr/rss/economy.xml',
+                'source': 'yonhap'
+            },
+            {
+                'name': '한국경제 증권',
+                'url': 'https://www.hankyung.com/feed/stock',
+                'source': 'hankyung'
+            },
+        ]
+        
+        collected_titles = set()  # 중복 제거용
+        
+        for feed_info in rss_feeds:
+            try:
+                print(f"[INFO] {feed_info['name']} RSS 수집 중...")
+                
+                feed = feedparser.parse(feed_info['url'])
+                
+                if not feed.entries:
+                    print(f"[INFO] {feed_info['name']}에서 뉴스를 찾을 수 없습니다.")
+                    continue
+                
+                for entry in feed.entries:
+                    try:
+                        title = entry.get('title', '')
+                        
+                        # 종목명으로 필터링 (제목 또는 요약에 포함된 경우만)
+                        summary = entry.get('summary', '') or entry.get('description', '')
+                        if company_name not in title and company_name not in summary:
+                            continue
+                        
+                        # 중복 체크 (Jaccard 유사도)
+                        title_lower = title.lower()
+                        is_duplicate = False
+                        title_words = set(title_lower.split())
+                        
+                        for existing in collected_titles:
+                            existing_words = set(existing.lower().split())
+                            if title_words and existing_words:
+                                intersection = len(title_words & existing_words)
+                                union = len(title_words | existing_words)
+                                similarity = intersection / union if union > 0 else 0
+                                if similarity >= 0.5:
+                                    is_duplicate = True
+                                    break
+                        
+                        if is_duplicate:
+                            continue
+                        
+                        link = entry.get('link', '')
+                        published = entry.get('published', '') or entry.get('pubDate', '')
+                        
+                        # 날짜 파싱
+                        date_str = self._parse_rss_date(published) if published else None
+                        
+                        # HTML 태그 제거
+                        if summary:
+                            summary = re.sub(r'<[^>]+>', '', summary)
+                            summary = summary.strip()[:500]
+                        
+                        news_item = {
+                            'title': title,
+                            'url': link,
+                            'date': date_str,
+                            'content': summary,
+                            'source': feed_info['source']
+                        }
+                        
+                        news_list.append(news_item)
+                        collected_titles.add(title)
+                        
+                        if len(news_list) >= max_items:
+                            break
+                        
+                    except Exception as e:
+                        print(f"[ERROR] RSS 아이템 처리 실패: {e}")
+                        continue
+                
+                if len(news_list) >= max_items:
+                    break
+                    
+            except Exception as e:
+                print(f"[ERROR] {feed_info['name']} RSS 수집 실패: {e}")
+                continue
+        
+        print(f"[INFO] 한국 언론사 RSS에서 {len(news_list)}개 뉴스 수집 완료 (종목: {company_name})")
+        return news_list
+
+
     def fetch_yahoo_finance_news_rss(
         self,
         ticker: str,
@@ -469,7 +588,7 @@ class NewsCollector:
                     # 날짜 파싱 시도
                     parsed_date = datetime.strptime(match.group(0), date_format)
                     return parsed_date.strftime('%Y-%m-%d %H:%M:%S')
-                except:
+                except (ValueError, TypeError):
                     continue
 
         # 파싱 실패 시 현재 시간 반환
@@ -493,7 +612,7 @@ class NewsCollector:
             from email.utils import parsedate_to_datetime
             dt = parsedate_to_datetime(date_str)
             return dt.strftime('%Y-%m-%d %H:%M:%S')
-        except:
+        except (ValueError, TypeError):
             return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     def save_news(self, ticker: str, news_list: List[Dict]) -> int:
@@ -547,6 +666,7 @@ class NewsCollector:
         company_name: Optional[str] = None,
         use_naver: bool = True,
         use_google: bool = True,
+        use_korean_press: bool = True,  # 🔧 한국 언론사 RSS 추가
         max_pages: int = 3,
         max_items: int = 20
     ) -> int:
@@ -558,6 +678,7 @@ class NewsCollector:
             company_name: 회사명 (Google News 검색용)
             use_naver: 네이버 금융 뉴스 수집 여부
             use_google: Google News 수집 여부
+            use_korean_press: 한국 언론사 RSS 수집 여부 (매일경제, 연합뉴스, 한국경제)
             max_pages: 네이버 금융 최대 페이지 수
             max_items: Google News 최대 아이템 수
 
@@ -565,6 +686,11 @@ class NewsCollector:
             총 저장된 뉴스 수
         """
         all_news = []
+
+        # 🔧 한국 언론사 경제/증권 RSS 수집 (본문 요약 포함, 가장 빠름)
+        if use_korean_press and company_name:
+            korean_press_news = self.fetch_korean_press_rss(company_name, max_items)
+            all_news.extend(korean_press_news)
 
         # 네이버 금융 뉴스 수집
         if use_naver:
@@ -588,7 +714,8 @@ class NewsCollector:
         ticker: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        exclude_sources: Optional[List[str]] = None  # 🔧 제외할 출처 리스트
     ) -> List[Dict]:
         """
         DB에서 뉴스를 조회합니다.
@@ -598,6 +725,7 @@ class NewsCollector:
             start_date: 시작 날짜 (YYYY-MM-DD)
             end_date: 종료 날짜 (YYYY-MM-DD)
             limit: 최대 조회 수
+            exclude_sources: 제외할 출처 리스트 (예: ['naver_finance'])
 
         Returns:
             뉴스 리스트
@@ -612,6 +740,12 @@ class NewsCollector:
         if end_date:
             query += " AND published_date <= ?"
             params.append(end_date)
+        
+        # 🔧 특정 출처 제외
+        if exclude_sources:
+            placeholders = ','.join('?' * len(exclude_sources))
+            query += f" AND source NOT IN ({placeholders})"
+            params.extend(exclude_sources)
 
         query += " ORDER BY published_date DESC LIMIT ?"
         params.append(limit)

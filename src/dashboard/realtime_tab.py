@@ -2,20 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
-from pathlib import Path
 import os
-import sys
 
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-try:
-    from src.collectors.kis_realtime_collector import KISRealtimeCollector
-except ImportError:
-    # 경로 문제 시 상대 경로 시도
-    sys.path.append(str(PROJECT_ROOT / "src" / "collectors"))
-    from kis_realtime_collector import KISRealtimeCollector
+from src.collectors.kis_realtime_collector import KISRealtimeCollector
 
 def display_realtime_data():
     """실시간 시세 탭 (REST API 기반)"""

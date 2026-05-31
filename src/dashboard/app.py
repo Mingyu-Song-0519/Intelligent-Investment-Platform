@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
-import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 import numpy as np
@@ -19,13 +18,19 @@ warnings.filterwarnings('ignore', category=FutureWarning, module='keras')
 warnings.filterwarnings('ignore', category=UserWarning, module='tensorflow')
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='tensorflow')
 
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from config import DEFAULT_TICKERS, US_TICKERS, DASHBOARD_CONFIG, ENSEMBLE_CONFIG, MARKET_CONFIG, EXCHANGE_RATE_CONFIG
 from src.collectors.stock_collector import StockDataCollector
 from src.collectors.multi_stock_collector import MultiStockCollector
+
+# Phase 2: 모듈화된 유틸리티 및 상태 관리
+from src.dashboard.utils.data_cache import (
+    get_cached_stock_data, 
+    get_cached_multi_stock_data,
+    get_cached_exchange_rate
+)
+from src.dashboard.utils.metric_utils import display_metrics
+from src.dashboard.utils.signal_utils import display_signals
+from src.dashboard.state.session_manager import SessionManager, initialize_stock_lists, on_stock_change
 
 # Phase F: New MarketDataService with caching and fallback
 try:
@@ -73,12 +78,32 @@ try:
 except ImportError:
     SCREENER_AVAILABLE = False
 
+# 팩터 투자 뷰
+try:
+    from src.dashboard.views.factor_view import display_factor_investing
+    FACTOR_INVESTING_AVAILABLE = True
+except ImportError:
+    FACTOR_INVESTING_AVAILABLE = False
+    def display_factor_investing():
+        st.error("팩터 투자 모듈을 로드할 수 없습니다.")
+
 # Phase D: AI 챗봇
 try:
     from src.dashboard.components.sidebar_chat import render_sidebar_chat
     CHATBOT_AVAILABLE = True
 except ImportError:
     CHATBOT_AVAILABLE = False
+
+# Phase 2: Views 모듈
+from src.dashboard.views import (
+    display_multi_stock_comparison,
+    display_news_sentiment,
+    display_ai_prediction,
+    display_backtest,
+    display_portfolio_optimization,
+    display_risk_analysis,
+    display_market_breadth
+)
 
 
 def setup_page():
@@ -121,9 +146,13 @@ def setup_page():
             overflow: hidden;
         }
         
-        /* Plotly 차트 모바일 스크롤 강제 허용 (핵심) */
+        /* Plotly 차트 터치 인터랙션 활성화 */
         .js-plotly-plot, .plot-container, .main-svg {
-            touch-action: pan-y !important; /* 수직 스크롤 허용 */
+            touch-action: pan-x pan-y pinch-zoom !important; /* 줌/팬 허용 */
+        }
+        /* Range slider 터치 영역 */
+        .rangeslider-container {
+            touch-action: pan-x !important;
         }
         
         /* 모바일 당겨서 새로고침 방지 (스크롤 개선) */
@@ -137,99 +166,83 @@ def setup_page():
         .negative {
             color: #ff4b4b;
         }
+        
+        /* 🔧 Issue #6 수정: Disabled 체크박스/버튼 시각화 개선 */
+        div[data-testid="stCheckbox"][aria-disabled="true"] label,
+        div[data-testid="stCheckbox"] input:disabled + label,
+        .stCheckbox > label:has(input:disabled) {
+            opacity: 0.5 !important;
+            color: #888888 !important;
+            cursor: not-allowed !important;
+        }
+        div[data-testid="stCheckbox"] input:disabled + label::before {
+            background-color: #555555 !important;
+            border-color: #666666 !important;
+        }
+        /* Disabled 버튼 스타일 */
+        button:disabled, .stButton button:disabled {
+            opacity: 0.4 !important;
+            cursor: not-allowed !important;
+            background-color: #444444 !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_cached_stock_data(ticker: str, period: str) -> pd.DataFrame:
-    """주식 데이터 수집 (MarketDataService + 캐싱 적용)"""
-    try:
-        # Phase F: MarketDataService 우선 사용 (Fallback + SQLite 캐싱)
-        if MARKET_SERVICE_AVAILABLE:
-            market = st.session_state.get('current_market', 'KR')
-            service = MarketDataService(market=market)
-            ohlcv = service.get_ohlcv(ticker, period=period)
-            df = ohlcv.to_dataframe()
-            
-            # 차트 호환성: index를 date 컬럼으로 변환
-            if 'date' not in df.columns:
-                df = df.reset_index()
-                # 컬럼명 정규화 (Date, index 등 → date)
-                if 'Date' in df.columns:
-                    df = df.rename(columns={'Date': 'date'})
-                elif 'index' in df.columns:
-                    df = df.rename(columns={'index': 'date'})
-                elif df.columns[0] != 'date':
-                    df = df.rename(columns={df.columns[0]: 'date'})
-            
-            return df
-        else:
-            # Fallback: 기존 StockDataCollector
-            collector = StockDataCollector()
-            return collector.fetch_stock_data(ticker, period)
-    except Exception as e:
-        st.error(f"데이터 수집 오류: {e}")
-        return pd.DataFrame()
+# [Phase 2] 데이터 캐싱 함수들은 src/dashboard/utils/data_cache.py로 이동됨
+# get_cached_stock_data, get_cached_multi_stock_data, get_cached_stock_listing, get_cached_exchange_rate
 
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_cached_multi_stock_data(tickers: list, period: str) -> dict:
-    """다중 종목 데이터 수집 (캐싱 적용, 1시간)"""
-    try:
-        collector = MultiStockCollector()
-        # MultiStockCollector 메서드가 collect_multiple인지 확인 필요
-        if hasattr(collector, 'collect_multiple'):
-            return collector.collect_multiple(tickers, period)
-        else:
-            return collector.fetch_multiple_stocks(tickers, period)
-    except Exception as e:
-        st.error(f"다중 데이터 수집 오류: {e}")
-        return {}
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def get_cached_stock_listing(market: str) -> tuple:
-    """종목 리스트 수집 (캐싱 적용, 24시간)"""
-    try:
-        import FinanceDataReader as fdr
+def resample_ohlcv(df: pd.DataFrame, interval: str) -> pd.DataFrame:
+    """
+    OHLCV 데이터를 주간/월간 봉으로 리샘플링
+    
+    Args:
+        df: 일봉 데이터 (date, open, high, low, close, volume 컬럼 필요)
+        interval: "1d" (일봉), "1wk" (주봉), "1mo" (월봉)
         
-        if market == 'US':
-            df_nyse = fdr.StockListing('NYSE')
-            df_nasdaq = fdr.StockListing('NASDAQ')
-            df = pd.concat([df_nyse, df_nasdaq], ignore_index=True)
-            df = df.dropna(subset=['Symbol', 'Name'])
-            df = df.drop_duplicates(subset=['Symbol'])
-            stock_dict = dict(zip(
-                df['Name'] + ' (' + df['Symbol'] + ')',
-                df['Symbol']
-            ))
-        else:  # KR
-            df = fdr.StockListing('KRX')
-            stock_dict = dict(zip(
-                df['Name'] + ' (' + df['Code'] + ')',
-                df['Code']
-            ))
-        
-        return stock_dict, list(stock_dict.keys())
-    except Exception as e:
-        print(f"[ERROR] 종목 리스트 로딩 실패: {e}")
-        return {}, []
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_cached_exchange_rate() -> float:
-    """환율 데이터 수집 (캐싱 적용, 1시간)"""
-    try:
-        import yfinance as yf
-        usdkrw = yf.Ticker("USDKRW=X")
-        rate = usdkrw.info.get('regularMarketPrice', None)
-        if rate is None:
-            rate = usdkrw.history(period="1d")['Close'].iloc[-1]
-        return float(rate)
-    except Exception as e:
-        print(f"[ERROR] 환율 데이터 수집 실패: {e}")
-        return 1350.0  # 기본값
+    Returns:
+        리샘플링된 DataFrame
+    """
+    if interval == "1d":
+        return df  # 일봉은 그대로 반환
+    
+    # date 컬럼을 인덱스로 설정
+    df_copy = df.copy()
+    if 'date' in df_copy.columns:
+        df_copy['date'] = pd.to_datetime(df_copy['date'])
+        df_copy = df_copy.set_index('date')
+    
+    # 리샘플링 규칙
+    resample_rule = 'W' if interval == "1wk" else 'ME'  # W=주간, ME=월말
+    
+    # OHLCV 리샘플링
+    agg_dict = {
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum'
+    }
+    
+    # 존재하는 컬럼만 집계
+    agg_dict = {k: v for k, v in agg_dict.items() if k in df_copy.columns}
+    
+    resampled = df_copy.resample(resample_rule).agg(agg_dict).dropna()
+    
+    # 기술적 지표 재계산 (필요 시)
+    # RSI, MACD 등은 리샘플링된 데이터에서 다시 계산해야 정확함
+    # 여기서는 간단히 마지막 값만 사용
+    for col in ['rsi', 'macd', 'macd_signal', 'macd_hist', 'bb_upper', 'bb_lower', 'bb_mid']:
+        if col in df_copy.columns:
+            resampled[col] = df_copy[col].resample(resample_rule).last()
+    
+    # date를 컬럼으로 되돌림
+    resampled = resampled.reset_index()
+    resampled = resampled.rename(columns={'index': 'date'})
+    if resampled.columns[0] != 'date':
+        resampled = resampled.rename(columns={resampled.columns[0]: 'date'})
+    
+    return resampled
 
 def create_candlestick_chart(df: pd.DataFrame, ticker_name: str) -> go.Figure:
     """캔들스틱 차트 생성"""
@@ -361,450 +374,50 @@ def create_candlestick_chart(df: pd.DataFrame, ticker_name: str) -> go.Figure:
         template='plotly_dark',
         showlegend=True,
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
-        xaxis_rangeslider_visible=False,
-        dragmode=False, # 모바일 스크롤 위해 드래그 비활성화
-        hovermode="x unified" # 터치 시 호버 정보 표시
+        # 🔧 인터랙티브 차트: rangeslider 활성화 (기간 선택 슬라이더)
+        xaxis_rangeslider_visible=True,
+        xaxis_rangeslider_thickness=0.05,  # 슬라이더 두께
+        xaxis_rangeslider_bgcolor='rgba(50,50,50,0.3)',
+        # 드래그 모드: pan 또는 zoom 선택 가능
+        dragmode='pan',  # 기본은 팬 (드래그로 이동), 더블클릭으로 리셋
+        hovermode="x unified"  # 터치 시 호버 정보 표시
     )
     
-    # X축 날짜 형식 한글화 및 모바일 스크롤 지원 (fixedrange=True)
-    # fixedrange=True를 설정하면 차트 줌/팬이 비활성화되어 자연스럽게 페이지 스크롤이 가능해짐
-    fig.update_xaxes(tickformat="%Y년 %m월", row=1, col=1, fixedrange=True)
-    fig.update_xaxes(tickformat="%Y년 %m월", row=2, col=1, fixedrange=True)
-    fig.update_xaxes(tickformat="%Y년 %m월", row=3, col=1, fixedrange=True)
-    fig.update_xaxes(tickformat="%Y년 %m월", row=4, col=1, fixedrange=True)
+    # X축 날짜 형식 한글화 + 줌/팬 활성화
+    # 🔧 모든 차트 하단에 날짜 표시
+    fig.update_xaxes(tickformat="%Y년 %m월 %d일", row=1, col=1, fixedrange=False, showticklabels=True)
+    fig.update_xaxes(tickformat="%Y년 %m월 %d일", row=2, col=1, fixedrange=False, showticklabels=True)
+    fig.update_xaxes(tickformat="%Y년 %m월 %d일", row=3, col=1, fixedrange=False, showticklabels=True)
+    fig.update_xaxes(tickformat="%Y년 %m월 %d일", row=4, col=1, fixedrange=False, showticklabels=True)
     
-    # Y축도 고정
-    fig.update_yaxes(fixedrange=True)
+    # Y축은 자동 조정 (X축 줌에 따라 Y축 범위 조정)
+    fig.update_yaxes(fixedrange=False, autorange=True)
     
     return fig
 
 
-def display_metrics(df: pd.DataFrame):
-    """주요 지표 표시"""
-    if df.empty:
-        return
-    
-    latest = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) > 1 else latest
-    
-    price_change = latest['close'] - prev['close']
-    price_change_pct = (price_change / prev['close']) * 100
-    
-    # 통화 기호
-    currency = st.session_state.get('currency_symbol', '₩')
-    current_market = st.session_state.get('current_market', 'KR')
-    
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
-    with col1:
-        st.metric(
-            label="현재가",
-            value=f"{currency}{latest['close']:,.2f}" if currency == "$" else f"{currency}{latest['close']:,.0f}",
-            delta=f"{price_change:+,.2f} ({price_change_pct:+.2f}%)" if currency == "$" else f"{price_change:+,.0f} ({price_change_pct:+.2f}%)"
-        )
-    
-    with col2:
-        st.metric(
-            label="거래량",
-            value=f"{latest['volume']:,.0f}",
-        )
-    
-    with col3:
-        if 'rsi' in df.columns and pd.notna(latest.get('rsi')):
-            rsi_val = latest['rsi']
-            rsi_status = "과매수" if rsi_val > 70 else "과매도" if rsi_val < 30 else "중립"
-            st.metric(
-                label=f"RSI ({rsi_status})",
-                value=f"{rsi_val:.1f}"
-            )
-    
-    with col4:
-        if 'macd' in df.columns and pd.notna(latest.get('macd')):
-            macd_val = latest['macd']
-            st.metric(
-                label="MACD",
-                value=f"{macd_val:.2f}"
-            )
-    
-    with col5:
-        # ADX 추세 강도 표시
-        if 'adx' in df.columns and pd.notna(latest.get('adx')):
-            adx_val = latest['adx']
-            if adx_val < 25:
-                adx_status = "약함🔵"
-            elif adx_val < 50:
-                adx_status = "강함🟢"
-            else:
-                adx_status = "매우강함🔴"
-            st.metric(
-                label=f"ADX ({adx_status})",
-                value=f"{adx_val:.1f}"
-            )
-    
-    with col6:
-        # 52주 고가/저가 대비
-        high_52w = df['high'].tail(252).max()
-        low_52w = df['low'].tail(252).min()
-        current_pos = (latest['close'] - low_52w) / (high_52w - low_52w) * 100
-        st.metric(
-            label="52주 범위 위치",
-            value=f"{current_pos:.1f}%"
-        )
-    
-    # 미국 주식일 경우 환율 정보 추가 표시
-    if current_market == 'US':
-        try:
-            exchange_rate = get_cached_exchange_rate()
-            krw_price = latest['close'] * exchange_rate
-            krw_change = price_change * exchange_rate
-            
-            st.markdown("---")
-            ecol1, ecol2, ecol3 = st.columns(3)
-            with ecol1:
-                st.metric(
-                    label="💱 USD/KRW 환율",
-                    value=f"₩{exchange_rate:,.2f}"
-                )
-            with ecol2:
-                st.metric(
-                    label="🇰🇷 원화 환산가",
-                    value=f"₩{krw_price:,.0f}",
-                    delta=f"{krw_change:+,.0f}"
-                )
-            with ecol3:
-                st.caption("※ 환율 데이터: Yahoo Finance (1시간 캐싱)")
-        except Exception as e:
-            print(f"[WARNING] 환율 표시 실패: {e}")
-    
-    # 초보자 힌트 섹션
-    with st.expander("💡 지표 설명 보기 (초보자용)", expanded=False):
-        hint_col1, hint_col2, hint_col3 = st.columns(3)
-        with hint_col1:
-            st.markdown(f"**RSI**: {get_hint_text('RSI', 'short')}")
-            st.markdown(f"**MACD**: {get_hint_text('MACD', 'short')}")
-        with hint_col2:
-            st.markdown(f"**ADX**: {get_hint_text('ADX', 'short')}")
-            st.markdown(f"**VWAP**: {get_hint_text('VWAP', 'short')}")
-        with hint_col3:
-            st.markdown(f"**ATR**: {get_hint_text('ATR', 'short')}")
-            st.markdown(f"**볼린저밴드**: 주가의 변동 범위를 보여주는 밴드입니다.")
+
+# [Phase 2] display_metrics는 src/dashboard/utils/metric_utils.py로 이동됨
 
 
-def display_signals(df: pd.DataFrame):
-    """매매 시그널 표시"""
-    st.subheader("📊 매매 시그널")
-    
-    # 지표 확인
-    if 'rsi' not in df.columns or 'macd' not in df.columns:
-        st.warning("기술적 지표가 계산되지 않았습니다.")
-        return
-    
-    latest = df.iloc[-1]
-    
-    # 첫 번째 행: RSI, MACD, 볼린저밴드
-    st.markdown("#### 기술적 지표 시그널")
-    signal_cols = st.columns(3)
-
-    with signal_cols[0]:
-        rsi_val = latest.get('rsi', 50)
-        if pd.notna(rsi_val):
-            if rsi_val < 30:
-                st.success(f"🟢 RSI 과매도 구간 ({rsi_val:.1f})")
-                st.caption("💡 **매수 검토**: RSI 30 미만은 과매도 상태로, 반등 가능성이 높습니다.")
-            elif rsi_val > 70:
-                st.error(f"🔴 RSI 과매수 구간 ({rsi_val:.1f})")
-                st.caption("💡 **매도 검토**: RSI 70 초과는 과매수 상태로, 조정 가능성이 있습니다.")
-            else:
-                st.info(f"⚪ RSI 중립 ({rsi_val:.1f})")
-                st.caption("💡 **관망**: RSI 30~70 사이는 중립 구간으로, 다른 지표를 함께 확인하세요.")
-        else:
-            st.info("⚪ RSI 데이터 없음")
-
-    with signal_cols[1]:
-        macd_val = latest.get('macd', 0)
-        macd_signal = latest.get('macd_signal', 0)
-        if pd.notna(macd_val) and pd.notna(macd_signal):
-            macd_diff = macd_val - macd_signal
-            if macd_val > macd_signal:
-                st.success(f"🟢 MACD 상승 추세 (+{macd_diff:.2f})")
-                st.caption("💡 **매수 신호**: MACD가 시그널선 위에 있어 상승 모멘텀입니다.")
-            else:
-                st.error(f"🔴 MACD 하락 추세 ({macd_diff:.2f})")
-                st.caption("💡 **매도 신호**: MACD가 시그널선 아래로 하락 모멘텀입니다.")
-        else:
-            st.info("⚪ MACD 데이터 없음")
-
-    with signal_cols[2]:
-        close = latest.get('close', 0)
-        bb_lower = latest.get('bb_lower', 0)
-        bb_upper = latest.get('bb_upper', 0)
-        bb_middle = latest.get('bb_middle', 0)
-        if pd.notna(bb_lower) and pd.notna(bb_upper) and bb_upper > bb_lower:
-            bb_position = (close - bb_lower) / (bb_upper - bb_lower) * 100
-            if close < bb_lower:
-                st.success("🟢 볼린저밴드 하단 터치")
-                st.caption("💡 **매수 검토**: 하단 밴드 터치는 과매도 신호로, 반등 가능성이 있습니다.")
-            elif close > bb_upper:
-                st.error("🔴 볼린저밴드 상단 터치")
-                st.caption("💡 **매도 검토**: 상단 밴드 터치는 과매수 신호로, 조정 가능성이 있습니다.")
-            else:
-                st.info(f"⚪ 볼린저밴드 중립 ({bb_position:.0f}%)")
-                st.caption("💡 **관망**: 밴드 내 중간 위치로, 추세 방향을 확인하세요.")
-        else:
-            st.info("⚪ 볼린저밴드 데이터 없음")
-    
-    # 두 번째 행: 이동평균 교차, 거래량 분석
-    st.markdown("#### 추가 시그널")
-    signal_cols2 = st.columns(3)
-    
-    with signal_cols2[0]:
-        # 이동평균 교차 (골든크로스/데드크로스)
-        ma5 = latest.get('ma5', None)
-        ma20 = latest.get('ma20', None)
-        if pd.notna(ma5) and pd.notna(ma20):
-            if ma5 > ma20:
-                # 이전 데이터와 비교하여 교차 여부 확인
-                prev = df.iloc[-2] if len(df) > 1 else latest
-                prev_ma5 = prev.get('ma5', 0)
-                prev_ma20 = prev.get('ma20', 0)
-                if pd.notna(prev_ma5) and pd.notna(prev_ma20) and prev_ma5 <= prev_ma20:
-                    st.success("🟢 골든크로스 발생!")
-                    st.caption("💡 **강력 매수 신호**: 단기 MA가 장기 MA를 상향 돌파했습니다.")
-                else:
-                    st.success("🟢 상승 추세 (MA5 > MA20)")
-                    st.caption("💡 **매수 우위**: 단기 이동평균이 장기 이동평균 위에 있습니다.")
-            else:
-                prev = df.iloc[-2] if len(df) > 1 else latest
-                prev_ma5 = prev.get('ma5', 0)
-                prev_ma20 = prev.get('ma20', 0)
-                if pd.notna(prev_ma5) and pd.notna(prev_ma20) and prev_ma5 >= prev_ma20:
-                    st.error("🔴 데드크로스 발생!")
-                    st.caption("💡 **강력 매도 신호**: 단기 MA가 장기 MA를 하향 돌파했습니다.")
-                else:
-                    st.error("🔴 하락 추세 (MA5 < MA20)")
-                    st.caption("💡 **매도 우위**: 단기 이동평균이 장기 이동평균 아래에 있습니다.")
-        else:
-            st.info("⚪ 이동평균 데이터 없음")
-    
-    with signal_cols2[1]:
-        # 거래량 분석
-        current_volume = latest.get('volume', 0)
-        if pd.notna(current_volume) and 'volume' in df.columns:
-            avg_volume = df['volume'].tail(20).mean()
-            volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
-            if volume_ratio > 2.0:
-                st.success(f"🟢 거래량 급증 ({volume_ratio:.1f}배)")
-                st.caption("💡 **주목**: 평균 대비 2배 이상 거래량은 큰 움직임 신호입니다.")
-            elif volume_ratio > 1.5:
-                st.info(f"⚪ 거래량 증가 ({volume_ratio:.1f}배)")
-                st.caption("💡 **관심**: 평균보다 높은 거래량으로 관심이 집중되고 있습니다.")
-            elif volume_ratio < 0.5:
-                st.warning(f"🟡 거래량 감소 ({volume_ratio:.1f}배)")
-                st.caption("💡 **주의**: 낮은 거래량은 추세 지속력이 약할 수 있습니다.")
-            else:
-                st.info(f"⚪ 거래량 보통 ({volume_ratio:.1f}배)")
-                st.caption("💡 **정상**: 평균 수준의 거래량입니다.")
-        else:
-            st.info("⚪ 거래량 데이터 없음")
-    
-    with signal_cols2[2]:
-        # 종합 판단
-        score = 0
-        signals = []
-        
-        # RSI 점수
-        if pd.notna(latest.get('rsi')):
-            if latest['rsi'] < 30:
-                score += 2
-                signals.append("RSI 과매도")
-            elif latest['rsi'] > 70:
-                score -= 2
-                signals.append("RSI 과매수")
-        
-        # MACD 점수
-        if pd.notna(latest.get('macd')) and pd.notna(latest.get('macd_signal')):
-            if latest['macd'] > latest['macd_signal']:
-                score += 1
-                signals.append("MACD 상승")
-            else:
-                score -= 1
-                signals.append("MACD 하락")
-        
-        # 이동평균 점수
-        if pd.notna(latest.get('ma5')) and pd.notna(latest.get('ma20')):
-            if latest['ma5'] > latest['ma20']:
-                score += 1
-                signals.append("MA 상승추세")
-            else:
-                score -= 1
-                signals.append("MA 하락추세")
-        
-        if score >= 3:
-            st.success(f"📈 종합: 강력 매수 ({score}점)")
-            st.caption(f"💡 {', '.join(signals)}")
-        elif score >= 1:
-            st.success(f"📈 종합: 매수 우위 ({score}점)")
-            st.caption(f"💡 {', '.join(signals)}")
-        elif score <= -3:
-            st.error(f"📉 종합: 강력 매도 ({score}점)")
-            st.caption(f"💡 {', '.join(signals)}")
-        elif score <= -1:
-            st.error(f"📉 종합: 매도 우위 ({score}점)")
-            st.caption(f"💡 {', '.join(signals)}")
-        else:
-            st.info(f"⚖️ 종합: 중립 ({score}점)")
-            st.caption(f"💡 {', '.join(signals) if signals else '시그널 없음'}")
 
 
-def display_multi_stock_comparison():
-    """다중 종목 비교 뷰"""
-    st.subheader("📊 다중 종목 비교")
-
-    # 현재 시장
-    current_market = st.session_state.get('current_market', 'KR')
-    
-    # 종목 선택 (전체 종목 검색)
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-        selected_stocks = st.multiselect(
-            "비교할 종목 선택 (검색 가능)",
-            stock_options,
-            default=stock_options[:3] if len(stock_options) >= 3 else stock_options,
-            key="multi_stock_select"
-        )
-
-    with col2:
-        period = st.selectbox(
-            "기간",
-            ["1mo", "3mo", "6mo", "1y", "3y", "5y", "10y"],
-            index=3,
-            key="multi_period"
-        )
-
-    if st.button("🔄 데이터 수집 및 비교", type="primary", key="multi_fetch"):
-        if not selected_stocks:
-            st.warning("최소 1개 종목을 선택해주세요")
-            return
-
-        with st.spinner("데이터 수집 중..."):
-            try:
-                # 시장에 따른 ticker 생성
-                active_stock_list = st.session_state.get('active_stock_list', {})
-                if current_market == "US":
-                    tickers_to_fetch = [active_stock_list.get(name, "AAPL") for name in selected_stocks]
-                else:
-                    tickers_to_fetch = [active_stock_list.get(name, "005930") + ".KS" for name in selected_stocks]
-                # 캐싱 적용
-                results = get_cached_multi_stock_data(tickers_to_fetch, period)
-
-                if results:
-                    # 수익률 비교 차트
-                    st.markdown("### 📈 수익률 비교")
-                    fig = go.Figure()
-
-                    # ticker -> name 매핑 생성 (선택된 종목에서)
-                    ticker_to_name = {}
-                    for name in selected_stocks:
-                        if current_market == "US":
-                            ticker = active_stock_list.get(name, "AAPL")
-                        else:
-                            ticker = active_stock_list.get(name, "005930") + ".KS"
-                        ticker_to_name[ticker] = name.split(" (")[0]
-                    
-                    for ticker, df in results.items():
-                        if not df.empty:
-                            name = ticker_to_name.get(ticker, ticker)
-                            # 정규화된 수익률 계산
-                            normalized = (df['close'] / df['close'].iloc[0] - 1) * 100
-                            fig.add_trace(go.Scatter(
-                                x=df['date'],
-                                y=normalized,
-                                name=name,
-                                mode='lines'
-                            ))
-
-                    fig.update_layout(
-                        title="종목별 수익률 비교 (기준일 대비 %)",
-                        xaxis_title="날짜",
-                        yaxis_title="수익률 (%)",
-                        template='plotly_dark',
-                        height=500,
-                        xaxis_tickformat="%Y년 %m월",
-                        dragmode=False # 드래그 비활성화
-                    )
-                    fig.update_xaxes(fixedrange=True)
-                    fig.update_yaxes(fixedrange=True)
-                    
-                    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False, 'scrollZoom': False})
-
-                    # 상관관계 매트릭스
-                    st.markdown("### 🔗 상관관계 분석")
-                    close_prices = pd.DataFrame({
-                        ticker_to_name.get(ticker, ticker): df.set_index('date')['close']
-                        for ticker, df in results.items()
-                    })
-                    corr_matrix = close_prices.corr()
-
-                    fig_corr = px.imshow(
-                        corr_matrix,
-                        text_auto='.2f',
-                        color_continuous_scale='RdBu',
-                        aspect='auto',
-                        title="종목 간 상관관계"
-                    )
-                    fig_corr.update_layout(template='plotly_dark', height=400, dragmode=False)
-                    fig_corr.update_xaxes(fixedrange=True)
-                    fig_corr.update_yaxes(fixedrange=True)
-                    st.plotly_chart(fig_corr, width='stretch', config={'displayModeBar': False, 'scrollZoom': False})
-
-                    # 통계 요약
-                    st.markdown("### 📊 통계 요약")
-                    currency = MARKET_CONFIG[current_market]['currency_symbol']
-                    summary_data = []
-                    for ticker, df in results.items():
-                        name = ticker_to_name.get(ticker, ticker)
-                        total_return = (df['close'].iloc[-1] / df['close'].iloc[0] - 1) * 100
-                        volatility = df['close'].pct_change().std() * np.sqrt(252) * 100
-
-                        summary_data.append({
-                            '종목': name,
-                            '현재가': f"{currency}{df['close'].iloc[-1]:,.2f}" if current_market == 'US' else f"{currency}{df['close'].iloc[-1]:,.0f}",
-                            '수익률': f"{total_return:+.2f}%",
-                            '변동성(연)': f"{volatility:.2f}%",
-                            '평균거래량': f"{df['volume'].mean():,.0f}"
-                        })
-
-                    st.dataframe(pd.DataFrame(summary_data), width='stretch')
-                    
-                    # 미국 시장일 경우 환율 정보 표시
-                    if current_market == 'US':
-                        try:
-                            exchange_rate = get_cached_exchange_rate()
-                            st.info(f"💱 현재 환율: 1 USD = ₩{exchange_rate:,.2f} (1시간 캐싱)")
-                        except Exception:
-                            pass
-
-            except Exception as e:
-                st.error(f"오류 발생: {str(e)}")
+# [Phase 2] display_signals는 src/dashboard/utils/signal_utils.py로 이동됨
 
 
-def display_news_sentiment():
-    """뉴스 감성 분석 뷰"""
-    st.subheader("📰 뉴스 & 감성 분석")
-    
-    # 현재 시장 확인
-    current_market = st.session_state.get('current_market', 'KR')
 
-    # 시장에 따른 종목 목록 선택
-    if current_market == 'US':
-        stock_options = st.session_state.get('us_stock_names', ["Apple (AAPL)"])
-        default_stock = "Apple (AAPL)"
-        stock_list = st.session_state.get('us_stock_list', {"Apple (AAPL)": "AAPL"})
-    else:
-        stock_options = st.session_state.get('krx_stock_names', list(DEFAULT_TICKERS.keys()))
-        default_stock = "삼성전자 (005930)"
-        stock_list = st.session_state.get('krx_stock_list', {"삼성전자 (005930)": "005930"})
+
+# [Phase 2] display_multi_stock_comparison은 src/dashboard/views/multi_stock_view.py로 이동됨
+
+
+
+
+# [Phase 2] display_news_sentiment는 src/dashboard/views/news_sentiment_view.py로 이동됨
+
+
+
+
+
     
     default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
     selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="news_stock")
@@ -1066,15 +679,14 @@ def display_news_sentiment():
                 st.write(f"🔗 [기사 링크]({article['url']})")
 
 
-def display_ai_prediction():
-    """AI 예측 뷰 (앙상블)"""
-    st.subheader("🤖 AI 예측 (앙상블 모델)")
+
+# [Phase 2] display_ai_prediction은 src/dashboard/views/ai_prediction_view.py로 이동됨
+
 
     # 전체 종목 검색
     stock_options = st.session_state.get('active_stock_names', list(DEFAULT_TICKERS.keys()))
     default_stock = "삼성전자 (005930)" if st.session_state.get('current_market') == "KR" else "Apple (AAPL)"
-    default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
-    selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="ai_ticker")
+    selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="ai_ticker", on_change=on_stock_change, help="종목명 또는 코드로 검색 (예: 삼성전자, 005930)")
     
     # 시장에 따른 ticker 코드 생성
     if st.session_state.get('current_market') == "US":
@@ -1523,9 +1135,9 @@ def display_ai_prediction():
 
 
 
-def display_backtest():
-    """백테스팅 뷰"""
-    st.subheader("⏮️ 백테스팅")
+
+# [Phase 2] display_backtest는 src/dashboard/views/backtest_view.py로 이동됨
+
 
     # 현재 시장
     current_market = st.session_state.get('current_market', 'KR')
@@ -1534,7 +1146,7 @@ def display_backtest():
     stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
     default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
     default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
-    selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="bt_ticker")
+    selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="bt_ticker", on_change=on_stock_change, help="종목명 또는 코드로 검색 (예: 삼성전자, 005930)")
     
     # 시장에 따른 ticker 코드 생성
     if current_market == "US":
@@ -1768,9 +1380,13 @@ def display_single_stock_analysis_mini(panel_id: str):
     
     # 차트 표시
     if f'mini_data_{panel_id}' in st.session_state:
-        df = st.session_state[f'mini_data_{panel_id}']
+        df = st.session_state.get(f'mini_data_{panel_id}', pd.DataFrame())
         name = st.session_state.get(f'mini_name_{panel_id}', ticker_name)
-        
+
+        if df.empty:
+            st.warning("데이터가 없습니다.")
+            return
+
         # 주요 지표
         latest = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else latest
@@ -1813,13 +1429,13 @@ def display_multi_stock_comparison_mini(panel_id: str):
                     df = get_cached_stock_data(ticker, period)
                     if not df.empty:
                         data_dict[name] = df
-                except:
+                except Exception:
                     pass
             st.session_state[f'multi_data_{panel_id}'] = data_dict
             st.success(f"✅ {len(data_dict)}개 종목 로드 완료!")
     
     if f'multi_data_{panel_id}' in st.session_state:
-        data_dict = st.session_state[f'multi_data_{panel_id}']
+        data_dict = st.session_state.get(f'multi_data_{panel_id}', {})
         if data_dict:
             # 수익률 비교 차트
             fig = go.Figure()
@@ -1873,7 +1489,7 @@ def display_news_sentiment_mini(panel_id: str):
                 st.error(f"오류: {e}")
     
     if f'news_data_{panel_id}' in st.session_state:
-        news_df = st.session_state[f'news_data_{panel_id}']
+        news_df = st.session_state.get(f'news_data_{panel_id}', pd.DataFrame())
         if not news_df.empty:
             for _, row in news_df.head(5).iterrows():
                 st.markdown(f"**{row.get('title', 'N/A')}**")
@@ -1944,7 +1560,7 @@ def display_ai_prediction_mini(panel_id: str):
                     key=f"ai_use_saved_{panel_id}",
                     help="재학습 없이 예측만 수행"
                 )
-        except:
+        except Exception:
             pass
     
     # Transformer 및 저장 옵션
@@ -2015,7 +1631,7 @@ def display_ai_prediction_mini(panel_id: str):
                     try:
                         safe_ticker = ticker_code.replace(":", "").replace("/", "").replace(".KS", "")
                         predictor.save_models(safe_ticker)
-                    except:
+                    except Exception:
                         pass
                 
                 st.session_state[f'ai_result_{panel_id}'] = result
@@ -2025,7 +1641,7 @@ def display_ai_prediction_mini(panel_id: str):
                 st.error(f"오류: {e}")
     
     if f'ai_result_{panel_id}' in st.session_state:
-        result = st.session_state[f'ai_result_{panel_id}']
+        result = st.session_state.get(f'ai_result_{panel_id}', None)
         if result:
             direction = result.get('direction', 'N/A')
             confidence = result.get('confidence', 0) * 100
@@ -2086,7 +1702,7 @@ def display_backtest_mini(panel_id: str):
                 st.error(f"오류: {e}")
     
     if f'bt_result_{panel_id}' in st.session_state:
-        data = st.session_state[f'bt_result_{panel_id}']
+        data = st.session_state.get(f'bt_result_{panel_id}', {})
         m = data['metrics']
         
         c1, c2 = st.columns(2)
@@ -2138,7 +1754,7 @@ def display_portfolio_optimization_mini(panel_id: str):
                 st.error(f"오류: {e}")
     
     if f'port_result_{panel_id}' in st.session_state:
-        result = st.session_state[f'port_result_{panel_id}']
+        result = st.session_state.get(f'port_result_{panel_id}', {})
         if result.get('success'):
             st.metric("기대 수익률", f"{result['return']*100:.2f}%")
             st.metric("샤프 비율", f"{result['sharpe']:.2f}")
@@ -2174,15 +1790,23 @@ def display_risk_management_mini(panel_id: str):
                 st.error(f"오류: {e}")
     
     if f'risk_result_{panel_id}' in st.session_state:
-        summary = st.session_state[f'risk_result_{panel_id}']
+        summary = st.session_state.get(f'risk_result_{panel_id}', {})
         st.markdown("### 📉 VaR")
         st.metric("Historical VaR", f"₩{summary['historical_var']['var_amount']:,.0f}")
         st.metric("CVaR", f"₩{summary['cvar']['cvar_amount']:,.0f}")
 
 
+
+
+
 def main():
     """메인 대시보드"""
     setup_page()
+    
+    # 🔧 버그 수정: 종목 리스트를 사이드바 렌더링 전에 초기화
+    # Race Condition 방지 - active_stock_names가 먼저 설정되어야 함
+    initialize_stock_lists()
+
 
     st.title("📈 스마트 투자 분석 플랫폼")
     st.markdown("실시간 시세 · AI 예측 · 백테스팅 · 포트폴리오 최적화 · 리스크 관리 통합 플랫폼")
@@ -2263,7 +1887,7 @@ def main():
                 default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
             
             default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
-            selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="tab1_stock")
+            selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="tab1_stock", on_change=on_stock_change, help="종목명 또는 코드로 검색 (예: 삼성전자, 005930)")
             
             if current_market == "US":
                 ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "AAPL")
@@ -2272,6 +1896,10 @@ def main():
             ticker_name = selected.split(" (")[0] if "(" in selected else selected
             st.session_state.tab1_ticker_code = ticker_code
             st.session_state.tab1_ticker_name = ticker_name
+            
+            # 🔧 뷰 호환성: selected_ticker, selected_stock 키 동기화
+            st.session_state.selected_ticker = ticker_code
+            st.session_state.selected_stock = ticker_name
             
             period = st.selectbox(
                 "조회 기간",
@@ -2284,16 +1912,63 @@ def main():
                 key="tab1_period"
             )
             
+            # 🔧 봉 타입 선택 (일봉/주봉/월봉)
+            candle_interval = st.selectbox(
+                "봉 타입",
+                ["1d", "1wk", "1mo"],
+                index=0,
+                format_func=lambda x: {
+                    "1d": "📅 일봉", "1wk": "📆 주봉", "1mo": "🗓️ 월봉"
+                }.get(x, x),
+                key="tab1_interval",
+                help="차트에 표시할 캔들 단위 (일/주/월)"
+            )
+            st.session_state.candle_interval = candle_interval
+            
             if st.button("📥 데이터 수집", type="primary", key="tab1_fetch"):
                 st.session_state.tab1_fetch_clicked = True
             
             st.caption("💡 기술적 지표는 자동으로 계산됩니다.")
             # divider 제거 - 불필요한 공간 절약
         else:
-            # 기타 탭 - 간단한 시장 표시만
+            # 🔧 수정: 기타 탭에도 종목 선택 기능 추가 (AI 예측, 백테스팅 등)
+            st.header("⚙️ 설정")
+            
             market_label = "🇰🇷 한국" if current_market == "KR" else "🇺🇸 미국"
-            st.info(f"현재 시장: {market_label}")
-            # divider 제거 - 불필요한 공간 절약
+            st.info(f"시장: {market_label}")
+            
+            # 종목 검색 (공통)
+            stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
+            default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
+            default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
+            
+            selected = st.selectbox(
+                "종목 검색", 
+                stock_options, 
+                index=default_idx, 
+                key="general_tab_stock",
+                help="분석할 종목을 선택하세요"
+            )
+            
+            # 선택된 종목 정보 저장 (다른 탭에서 사용)
+            if current_market == "US":
+                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "AAPL")
+            else:
+                ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "005930") + ".KS"
+            ticker_name = selected.split(" (")[0] if "(" in selected else selected
+            
+            # 🔧 뷰 호환성: selected_ticker, selected_stock 키 동기화
+            st.session_state.selected_ticker = ticker_code
+            st.session_state.selected_stock = ticker_name
+            
+            # 공용 session_state 키에도 저장 (tab1과 호환)
+            st.session_state.tab1_ticker_code = ticker_code
+            st.session_state.tab1_ticker_name = ticker_name
+            st.session_state.general_ticker_code = ticker_code
+            st.session_state.general_ticker_name = ticker_name
+            
+            st.caption(f"선택: {ticker_name} ({ticker_code})")
+
         
         # ==========================================
         # Phase 3: 설정 통합 - 하나의 Expander + Tabs
@@ -2499,47 +2174,64 @@ def main():
     # ==========================================
     # Phase 2: 시장 선택 토글 버튼 (공간 50% 절약)
     # ==========================================
+    
+    # 🔧 수정: on_click 콜백으로 시장 전환 (rerun 전에 실행되어 즉시 반영)
+    def switch_market(new_market: str):
+        """시장 전환 콜백 - rerun 전에 실행됨"""
+        current = st.session_state.get('current_market', 'KR')
+        if current != new_market:
+            # 이전 시장 저장 (상태 복원용)
+            st.session_state.previous_market = current
+            st.session_state.current_market = new_market
+            st.session_state._market_just_changed = True  # 상태 복원 트리거
+            
+            # 🔧 Issue #7 수정: 시장 변경 시 현재 데이터 초기화
+            # (이전 시장 데이터가 새 시장에 표시되는 것 방지)
+            keys_to_clear = ['stock_data', 'last_fetched_ticker', 'ticker_code', 'ticker_name']
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # cache_version 증가로 캐시 무효화
+            st.session_state.cache_version = st.session_state.get('cache_version', 0) + 1
+    
     with st.sidebar:
         st.markdown("### 🌍 시장 선택")
         
         # 현재 시장 상태
         current_market_state = st.session_state.get('current_market', 'KR')
         
-        # 가로 2열 토글 버튼
+        # 가로 2열 토글 버튼 (on_click 사용)
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button(
+            st.button(
                 "🇰🇷 한국",
                 width="stretch",
                 type="primary" if current_market_state == "KR" else "secondary",
-                key="market_btn_kr"
-            ):
-                if current_market_state != "KR":
-                    st.session_state.market_changed = True
-                    st.session_state.new_market = "KR"
-                    st.rerun()
+                key="market_btn_kr",
+                on_click=switch_market,
+                args=("KR",)
+            )
         
         with col2:
-            if st.button(
+            st.button(
                 "🇺🇸 미국",
                 width="stretch",
                 type="primary" if current_market_state == "US" else "secondary",
-                key="market_btn_us"
-            ):
-                if current_market_state != "US":
-                    st.session_state.market_changed = True
-                    st.session_state.new_market = "US"
-                    st.rerun()
+                key="market_btn_us",
+                on_click=switch_market,
+                args=("US",)
+            )
         
         # 선택된 시장 캡션 표시
         market_full_label = "🇰🇷 한국 (KRX)" if current_market_state == "KR" else "🇺🇸 미국 (NYSE/NASDAQ)"
         st.caption(f"선택: {market_full_label}")
         # divider 제거 - 불필요한 공간 절약
     
-    # 시장 변경 처리 (Phase 2: 버튼 클릭 기반)
-    if st.session_state.get('market_changed', False):
-        new_market = st.session_state.new_market
+    # 시장 변경 후 상태 복원 처리 (on_click 콜백에서 current_market은 이미 업데이트됨)
+    if st.session_state.get('_market_just_changed', False):
+        new_market = st.session_state.current_market
         previous_market = st.session_state.get('previous_market', None)
         
         if previous_market is not None and previous_market != new_market:
@@ -2561,77 +2253,19 @@ def main():
                     elif key in st.session_state:
                         del st.session_state[key]
         
-        # 시장 상태 업데이트
-        st.session_state.current_market = new_market
-        st.session_state.previous_market = new_market
-        st.session_state.market_changed = False
-        
-        # 초기 previous_market 설정
-        if previous_market is None:
-            st.session_state.previous_market = new_market
-    else:
-        # 기본 previous_market 초기화
-        if 'previous_market' not in st.session_state:
-            st.session_state.previous_market = current_market_state
+        # 플래그 초기화
+        st.session_state._market_just_changed = False
     
-    # 시장에 따른 종목 리스트 및 통화 설정
-    market = st.session_state.get('current_market', 'KR')
-    if market == "US":
-        st.session_state.current_market = "US"
-        st.session_state.currency_symbol = "$"
-        st.session_state.ticker_suffix = ""
-        
-        # 미국 인기 종목 (즉시 로딩)
-        if 'us_stock_list' not in st.session_state:
-            us_stocks = {
-                # 빅테크
-                "Apple (AAPL)": "AAPL", "Microsoft (MSFT)": "MSFT", "Google (GOOGL)": "GOOGL",
-                "Amazon (AMZN)": "AMZN", "Meta (META)": "META", "NVIDIA (NVDA)": "NVDA",
-                # 인기 종목
-                "Tesla (TSLA)": "TSLA", "Netflix (NFLX)": "NFLX", "AMD (AMD)": "AMD",
-                "Intel (INTC)": "INTC", "PayPal (PYPL)": "PYPL", "Adobe (ADBE)": "ADBE",
-                "Salesforce (CRM)": "CRM", "Cisco (CSCO)": "CSCO", "Oracle (ORCL)": "ORCL",
-                # 반도체
-                "Qualcomm (QCOM)": "QCOM", "Broadcom (AVGO)": "AVGO", "Texas Instruments (TXN)": "TXN",
-                # 소비재/금융
-                "Disney (DIS)": "DIS", "Coca-Cola (KO)": "KO", "Pepsi (PEP)": "PEP",
-                "Nike (NKE)": "NKE", "McDonald's (MCD)": "MCD", "Starbucks (SBUX)": "SBUX",
-                "Walmart (WMT)": "WMT", "Costco (COST)": "COST",
-                # 금융
-                "JPMorgan (JPM)": "JPM", "Goldman Sachs (GS)": "GS", "Bank of America (BAC)": "BAC",
-                "Visa (V)": "V", "Mastercard (MA)": "MA",
-                # 헬스케어
-                "Johnson & Johnson (JNJ)": "JNJ", "Pfizer (PFE)": "PFE", "UnitedHealth (UNH)": "UNH",
-                # 기타
-                "Boeing (BA)": "BA", "IBM (IBM)": "IBM", "3M (MMM)": "MMM",
-                # ETF
-                "S&P 500 ETF (SPY)": "SPY", "NASDAQ 100 ETF (QQQ)": "QQQ", 
-                "Dow Jones ETF (DIA)": "DIA", "Russell 2000 ETF (IWM)": "IWM"
-            }
-            st.session_state.us_stock_list = us_stocks
-            st.session_state.us_stock_names = list(us_stocks.keys())
-        
-        st.session_state.active_stock_list = st.session_state.us_stock_list
-        st.session_state.active_stock_names = st.session_state.us_stock_names
-        
-    else:  # 한국
-        st.session_state.current_market = "KR"
-        st.session_state.currency_symbol = "₩"
-        st.session_state.ticker_suffix = ".KS"
-        
-        # KRX 종목 리스트 로드 (캐싱 적용)
-        if 'krx_stock_list' not in st.session_state:
-            with st.spinner("🇰🇷 한국 종목 목록 로딩 중..."):
-                stock_dict, stock_names = get_cached_stock_listing('KR')
-                if stock_dict:
-                    st.session_state.krx_stock_list = stock_dict
-                    st.session_state.krx_stock_names = stock_names
-                else:
-                    st.session_state.krx_stock_list = {"삼성전자 (005930)": "005930"}
-                    st.session_state.krx_stock_names = ["삼성전자 (005930)"]
-        
-        st.session_state.active_stock_list = st.session_state.krx_stock_list
-        st.session_state.active_stock_names = st.session_state.krx_stock_names
+    # 기본 previous_market 초기화
+    if 'previous_market' not in st.session_state:
+        st.session_state.previous_market = st.session_state.get('current_market', 'KR')
+
+    
+    # ==========================================
+    # 종목 리스트 초기화는 initialize_stock_lists()에서 처리됨
+    # 시장 변경 처리만 유지
+    # ==========================================
+
 
     # ==========================================
     # Phase 3-4: 기존 알림/경제 지표 expander 제거됨
@@ -2784,8 +2418,8 @@ def main():
     if 'pending_tab' in st.session_state:
         pending = st.session_state.pending_tab
         if pending in tab_options:
-            # st.segmented_control의 시각적 상태 동기화를 위해 key 값 명시적 갱신
-            st.session_state.main_tab_selector = pending
+            # 🔧 수정: session_state에 직접 할당하지 않고 default만 변경
+            default_tab = pending
             st.session_state.active_tab_name = pending  # 탭 상태 갱신
         del st.session_state.pending_tab
     else:
@@ -2794,10 +2428,15 @@ def main():
         if saved_tab and saved_tab in tab_options:
             default_tab = saved_tab
     
+    # 🔧 수정: key가 이미 존재하면 default 대신 기존 값 사용
+    if 'main_tab_selector' in st.session_state and st.session_state.main_tab_selector in tab_options:
+        # 이미 key가 있으면 default를 무시 (충돌 방지)
+        pass
+    
     selected_tab = st.segmented_control(
         "분석 메뉴",
         tab_options,
-        default=default_tab,
+        default=default_tab if 'main_tab_selector' not in st.session_state else None,
         selection_mode="single",
         label_visibility="collapsed",
         key="main_tab_selector"  # 고유 key로 상태 유지
@@ -2825,8 +2464,15 @@ def main():
         
         if fetch_data:
             st.session_state.tab1_fetch_clicked = False
+        
+        # 🔧 종목 변경 감지: 이전 ticker와 비교
+        last_ticker = st.session_state.get('last_fetched_ticker', None)
+        stock_changed = (last_ticker != ticker_code) if last_ticker else False
+        
+        # 데이터 갱신 조건: 버튼 클릭 OR 최초 로드 OR 종목 변경
+        needs_refetch = fetch_data or 'stock_data' not in st.session_state or stock_changed
             
-        if fetch_data or 'stock_data' not in st.session_state:
+        if needs_refetch:
             with st.spinner(f'{ticker_name} 데이터를 불러오는 중...'):
                 try:
                     df = get_cached_stock_data(ticker_code, period)
@@ -2836,6 +2482,7 @@ def main():
                         df = analyzer.get_dataframe()
                         st.session_state['stock_data'] = df
                         st.session_state['ticker_name'] = ticker_name
+                        st.session_state['last_fetched_ticker'] = ticker_code  # 🔧 마지막 조회 ticker 저장
                         st.success(f"✅ {len(df)}개 데이터 로드 완료!")
                     else:
                         st.error("데이터를 가져올 수 없습니다.")
@@ -2863,7 +2510,15 @@ def main():
                             selected_periods.append(p)
                     st.session_state['selected_ma_periods'] = selected_periods
             
-            fig = create_candlestick_chart(df, ticker_name)
+            # 🔧 봉 타입에 따른 리샘플링
+            candle_interval = st.session_state.get('candle_interval', '1d')
+            chart_df = resample_ohlcv(df, candle_interval)
+            
+            # 봉 타입 표시
+            interval_labels = {"1d": "일봉", "1wk": "주봉", "1mo": "월봉"}
+            st.caption(f"📊 {interval_labels.get(candle_interval, '일봉')} 차트 ({len(chart_df)}개 봉)")
+            
+            fig = create_candlestick_chart(chart_df, ticker_name)
             st.plotly_chart(fig, width="stretch")
             display_signals(df)
             
@@ -3006,816 +2661,22 @@ def main():
             st.warning("AI 스크리너 모듈을 불러올 수 없습니다.")
 
 
-def display_portfolio_optimization():
-    """포트폴리오 최적화 뷰"""
-    st.subheader("💼 포트폴리오 최적화")
-    st.markdown("Markowitz 평균-분산 최적화를 통한 최적 포트폴리오 비중 계산")
 
-    # 현재 시장
-    current_market = st.session_state.get('current_market', 'KR')
-    
-    # 전체 종목 검색
-    stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-    selected_stocks = st.multiselect(
-        "포트폴리오에 포함할 종목 선택 (검색 가능, 최소 2개)",
-        stock_options,
-        default=stock_options[:4] if len(stock_options) >= 4 else stock_options[:2],
-        key="portfolio_stocks"
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        period = st.selectbox("분석 기간", ["6mo", "1y", "2y", "5y", "10y"], index=3, key="port_period")
-    with col2:
-        risk_free = st.number_input("무위험 수익률 (%)", value=3.5, min_value=0.0, max_value=10.0, step=0.1)
-
-    if len(selected_stocks) < 2:
-        st.warning("최소 2개 종목을 선택해주세요.")
-        return
-
-    if st.button("🎯 최적 포트폴리오 계산", type="primary"):
-        with st.spinner("데이터 수집 및 최적화 중..."):
-            try:
-                # 시장에 따른 ticker 생성
-                tickers = []
-                active_stock_list = st.session_state.get('active_stock_list', {})
-                for name in selected_stocks:
-                    if current_market == "US":
-                        ticker = active_stock_list.get(name, "AAPL")
-                    else:
-                        ticker = active_stock_list.get(name, "005930") + ".KS"
-                    tickers.append(ticker)
-                
-                results = get_cached_multi_stock_data(tickers, period)
-
-                if len(results) < 2:
-                    st.error("최소 2개 종목의 데이터가 필요합니다.")
-                    return
-
-                # 수익률 계산 - ticker_to_name 매핑
-                ticker_to_name = {}
-                for full_name in selected_stocks:
-                    if current_market == "US":
-                        ticker = active_stock_list.get(full_name, "AAPL")
-                    else:
-                        ticker = active_stock_list.get(full_name, "005930") + ".KS"
-                    ticker_to_name[ticker] = full_name.split(" (")[0]
-                
-                returns_data = {}
-                for ticker, df in results.items():
-                    if not df.empty:
-                        name = ticker_to_name.get(ticker, ticker)
-                        returns_data[name] = df.set_index('date')['close'].pct_change()
-
-                returns_df = pd.DataFrame(returns_data).dropna()
-
-                if len(returns_df) < 30:
-                    st.error("분석에 필요한 데이터가 부족합니다.")
-                    return
-
-                # 포트폴리오 최적화
-                optimizer = PortfolioOptimizer(returns_df, risk_free_rate=risk_free/100)
-
-                # 최대 샤프 비율 포트폴리오
-                max_sharpe = optimizer.optimize_max_sharpe()
-                min_vol = optimizer.optimize_min_volatility()
-                equal_weight = optimizer.get_equal_weight_portfolio()
-
-                # 결과 표시
-                st.success("✅ 최적화 완료!")
-
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.markdown("### 📈 최대 샤프 비율")
-                    if max_sharpe['success']:
-                        st.metric("기대 수익률", f"{max_sharpe['return']*100:.2f}%")
-                        st.metric("변동성", f"{max_sharpe['volatility']*100:.2f}%")
-                        st.metric("샤프 비율", f"{max_sharpe['sharpe']:.2f}")
-
-                with col2:
-                    st.markdown("### 📉 최소 변동성")
-                    if min_vol['success']:
-                        st.metric("기대 수익률", f"{min_vol['return']*100:.2f}%")
-                        st.metric("변동성", f"{min_vol['volatility']*100:.2f}%")
-                        st.metric("샤프 비율", f"{min_vol['sharpe']:.2f}")
-
-                with col3:
-                    st.markdown("### ⚖️ 동일 비중")
-                    st.metric("기대 수익률", f"{equal_weight['return']*100:.2f}%")
-                    st.metric("변동성", f"{equal_weight['volatility']*100:.2f}%")
-                    st.metric("샤프 비율", f"{equal_weight['sharpe']:.2f}")
-
-                # 최적 비중 표시
-                st.markdown("### 💰 최적 비중 (최대 샤프 기준)")
-                if max_sharpe['success']:
-                    currency = MARKET_CONFIG[current_market]['currency_symbol']
-                    base_amount = 100_000_000 if current_market == 'KR' else 100_000  # 1억원 or 10만불
-                    amount_label = "금액 (1억원 기준)" if current_market == 'KR' else "금액 ($100K 기준)"
-                    
-                    weights_df = pd.DataFrame({
-                        '종목': list(max_sharpe['weights'].keys()),
-                        '비중': [f"{w*100:.1f}%" for w in max_sharpe['weights'].values()],
-                        amount_label: [f"{currency}{w*base_amount:,.0f}" for w in max_sharpe['weights'].values()]
-                    })
-                    st.dataframe(weights_df, width='stretch', hide_index=True)
-                    
-                    # 미국 시장일 경우 환율 정보 추가
-                    if current_market == 'US':
-                        try:
-                            exchange_rate = get_cached_exchange_rate()
-                            st.info(f"💱 현재 환율: 1 USD = ₩{exchange_rate:,.2f} | 원화 환산 시 약 ₩{100_000 * exchange_rate:,.0f} 기준")
-                        except Exception:
-                            pass
-
-                    # 파이 차트
-                    fig = px.pie(
-                        values=list(max_sharpe['weights'].values()),
-                        names=list(max_sharpe['weights'].keys()),
-                        title="최적 포트폴리오 구성"
-                    )
-                    fig.update_layout(template='plotly_dark', height=400, dragmode=False)
-                    st.plotly_chart(fig, width='stretch', config={'scrollZoom': False})
+# [Phase 2] display_portfolio_optimization은 views 모듈로 이동됨
 
 
-                # 효율적 투자선
-                col_title1, col_help1 = st.columns([10, 1])
-                with col_title1:
-                    st.markdown("### 📊 효율적 투자선")
-                with col_help1:
-                    with st.popover("ℹ️"):
-                        st.markdown("""
-                        **효율적 투자선 (Efficient Frontier) 해석:**
-                        
-                        - **각 점** = 가능한 포트폴리오 조합
-                        - **⭐ 빨간 별** = 최대 샤프 비율
-                        - **◆ 초록 다이아** = 최소 변동성
-                        - **왼쪽 위로 갈수록** 좋음
-                        - 색상이 밝을수록 샤프 비율이 높음
-                        """)
-                random_portfolios = optimizer.generate_random_portfolios(3000)
-
-                fig = go.Figure()
-
-                # 랜덤 포트폴리오
-                fig.add_trace(go.Scatter(
-                    x=random_portfolios['volatility'] * 100,
-                    y=random_portfolios['return'] * 100,
-                    mode='markers',
-                    marker=dict(
-                        size=4,
-                        color=random_portfolios['sharpe'],
-                        colorscale='Viridis',
-                        showscale=True,
-                        colorbar=dict(title='샤프 비율')
-                    ),
-                    name='가능한 포트폴리오'
-                ))
-
-                # 최대 샤프
-                if max_sharpe['success']:
-                    fig.add_trace(go.Scatter(
-                        x=[max_sharpe['volatility'] * 100],
-                        y=[max_sharpe['return'] * 100],
-                        mode='markers',
-                        marker=dict(size=15, color='red', symbol='star'),
-                        name='최대 샤프 비율'
-                    ))
-
-                # 최소 변동성
-                if min_vol['success']:
-                    fig.add_trace(go.Scatter(
-                        x=[min_vol['volatility'] * 100],
-                        y=[min_vol['return'] * 100],
-                        mode='markers',
-                        marker=dict(size=15, color='green', symbol='diamond'),
-                        name='최소 변동성'
-                    ))
-
-                fig.update_layout(
-                    title="효율적 투자선 (Efficient Frontier)",
-                    xaxis_title="변동성 (%)",
-                    yaxis_title="기대 수익률 (%)",
-                    template='plotly_dark',
-                    height=500,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="left",
-                        x=0
-                    )
-                )
-                st.plotly_chart(fig, width='stretch', config={'scrollZoom': False})
-
-                # 상관관계 매트릭스
-                col_title2, col_help2 = st.columns([10, 1])
-                with col_title2:
-                    st.markdown("### 🔗 종목 간 상관관계")
-                with col_help2:
-                    with st.popover("ℹ️"):
-                        st.markdown("""
-                        **상관계수 해석:**
-                        
-                        - **+1.0 (빨강)** = 같은 방향으로 움직임
-                        - **0.0 (흰색)** = 무관하게 움직임
-                        - **-1.0 (파랑)** = 반대로 움직임
-                        
-                        상관관계가 낮을수록 분산 효과 ↑
-                        """)
-                corr_matrix = optimizer.get_correlation_matrix()
-                fig_corr = px.imshow(
-                    corr_matrix,
-                    text_auto='.2f',
-                    color_continuous_scale='RdBu',
-                    title="상관계수 행렬"
-                )
-                fig_corr.update_layout(template='plotly_dark', height=400, dragmode=False)
-                st.plotly_chart(fig_corr, width='stretch', config={'scrollZoom': False})
-
-            except Exception as e:
-                st.error(f"오류 발생: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+# [Phase 2] display_risk_management은 views 모듈로 이동됨
 
 
-def display_risk_management():
-    """리스크 관리 뷰"""
-    st.subheader("⚠️ 리스크 관리")
-    st.markdown("VaR, CVaR, 스트레스 테스팅을 통한 위험 분석")
-
-    # 현재 시장
-    current_market = st.session_state.get('current_market', 'KR')
-    currency = st.session_state.get('currency_symbol', '₩')
-    
-    # 전체 종목 검색
-    stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-    default_stock = "삼성전자 (005930)" if current_market == "KR" else "Apple (AAPL)"
-    default_idx = stock_options.index(default_stock) if default_stock in stock_options else 0
-    selected = st.selectbox("종목 검색", stock_options, index=default_idx, key="risk_ticker")
-    
-    # 시장에 따른 ticker 코드 생성
-    if current_market == "US":
-        ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "AAPL")
-    else:
-        ticker_code = st.session_state.get('active_stock_list', {}).get(selected, "005930") + ".KS"
-    ticker_name = selected.split(" (")[0] if "(" in selected else selected
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        portfolio_value = st.number_input(
-            "포트폴리오 가치 (원)",
-            min_value=1_000_000,
-            max_value=1_000_000_000,
-            value=100_000_000,
-            step=10_000_000
-        )
-    with col2:
-        confidence = st.slider("신뢰수준 (%)", 90, 99, 95) / 100
-    with col3:
-        horizon = st.selectbox("분석 기간 (일)", [1, 5, 10, 20], index=2)
-
-    if st.button("📊 리스크 분석 실행", type="primary"):
-        with st.spinner("리스크 분석 중..."):
-            try:
-                # 데이터 수집 (캐싱 적용, 2년 고정)
-                df = get_cached_stock_data(ticker_code, "2y")
-
-                if df.empty:
-                    st.error("데이터를 가져올 수 없습니다")
-                    return
-
-                # 수익률 계산
-                returns = df['close'].pct_change().dropna()
-
-                # 리스크 분석
-                rm = RiskManager(returns, portfolio_value)
-                summary = rm.get_risk_summary(confidence, horizon)
-
-                st.success("✅ 리스크 분석 완료!")
-
-                # VaR 결과
-                st.markdown("### 📉 VaR (Value at Risk)")
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.markdown("**Historical VaR**")
-                    st.metric("최대 예상 손실", f"₩{summary['historical_var']['var_amount']:,.0f}")
-
-                with col2:
-                    st.markdown("**Parametric VaR**")
-                    st.metric("최대 예상 손실", f"₩{summary['parametric_var']['var_amount']:,.0f}")
-
-                with col3:
-                    st.markdown("**Monte Carlo VaR**")
-                    st.metric("최대 예상 손실", f"₩{summary['monte_carlo_var']['var_amount']:,.0f}")
-
-                # CVaR
-                st.markdown("### 🔻 CVaR (Expected Shortfall)")
-                st.info(f"최악의 {(1-confidence)*100:.0f}% 시나리오에서 **평균 ₩{summary['cvar']['cvar_amount']:,.0f}** 손실 예상")
-
-                # VaR 시각화
-                st.markdown("### 📊 수익률 분포 및 VaR")
-                fig = go.Figure()
-
-                # 히스토그램
-                fig.add_trace(go.Histogram(
-                    x=returns * 100,
-                    nbinsx=50,
-                    name='일별 수익률 분포',
-                    marker_color='rgba(0, 150, 255, 0.6)'
-                ))
-
-                # VaR 선
-                var_return = summary['historical_var']['var_return'] * 100 / np.sqrt(horizon)
-                fig.add_vline(
-                    x=var_return,
-                    line_dash="dash",
-                    line_color="red",
-                    annotation_text=f"VaR ({confidence*100:.0f}%)"
-                )
-
-                fig.update_layout(
-                    title="일별 수익률 분포",
-                    xaxis_title="수익률 (%)",
-                    yaxis_title="빈도",
-                    template='plotly_dark',
-                    height=400
-                )
-                st.plotly_chart(fig, width='stretch', config={'scrollZoom': False})
-
-                # 통계
-                st.markdown("### 📈 수익률 통계")
-                stats = summary['statistics']
-                stats_df = pd.DataFrame({
-                    '지표': ['일평균 수익률', '일별 변동성', '왜도', '첨도', '최소 수익률', '최대 수익률'],
-                    '값': [
-                        f"{stats['mean_daily_return']*100:.3f}%",
-                        f"{stats['std_daily_return']*100:.3f}%",
-                        f"{stats['skewness']:.2f}",
-                        f"{stats['kurtosis']:.2f}",
-                        f"{stats['min_return']*100:.2f}%",
-                        f"{stats['max_return']*100:.2f}%"
-                    ],
-                    '설명': [
-                        '하루 평균 수익률',
-                        '수익률의 표준편차',
-                        '분포의 비대칭성 (0이면 대칭)',
-                        '분포의 뾰족함 (3 초과면 두꺼운 꼬리)',
-                        '관측된 최저 수익률',
-                        '관측된 최고 수익률'
-                    ]
-                })
-                st.dataframe(stats_df, width='stretch', hide_index=True)
-
-                # 스트레스 테스트
-                st.markdown("### 💥 스트레스 테스트")
-                stress_results = rm.stress_test()
-                st.dataframe(stress_results, width='stretch', hide_index=True)
-
-            except Exception as e:
-                st.error(f"오류 발생: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+# [Phase 2] display_market_breadth은 views 모듈로 이동됨
 
 
-def display_market_breadth():
-    """시장 체력 진단 뷰"""
-    st.subheader("🏥 시장 체력 진단")
-    st.markdown("시장 전체가 건강한지, 소수 종목만 오르는지 분석합니다.")
-    
-    # 초보자 힌트
-    with st.expander("💡 시장 폭(Market Breadth)이란?", expanded=False):
-        st.markdown(get_hint_text('breadth', 'detail'))
-    
-    current_market = st.session_state.get('current_market', 'KR')
-    market_name = "한국 (KOSPI)" if current_market == "KR" else "미국 (NYSE/NASDAQ)"
-    
-    st.info(f"📊 현재 분석 대상: **{market_name}**")
-    
-    if st.button("🔍 시장 체력 분석 시작", type="primary"):
-        with st.spinner("시장 데이터 수집 및 분석 중... (약 30초 소요)"):
-            try:
-                # 시장 폭 분석
-                breadth_analyzer = MarketBreadthAnalyzer(market=current_market)
-                summary = breadth_analyzer.get_breadth_summary()
-                
-                # 변동성 분석 (VIX)
-                vol_analyzer = VolatilityAnalyzer()
-                vix_current = vol_analyzer.get_current_vix()
-                vix_regime, vix_color = vol_analyzer.volatility_regime()
-                
-                st.success("✅ 분석 완료!")
-                
-                # 종합 점수
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric(
-                        label="🏆 시장 체력 점수",
-                        value=f"{summary['breadth_score']}/100",
-                        delta=summary['overall_status']
-                    )
-                with col2:
-                    if vix_current:
-                        st.metric(
-                            label=f"😱 VIX (공포지수) {vix_color}",
-                            value=f"{vix_current:.1f}",
-                            delta=vix_regime
-                        )
-                
-                st.markdown("---")
-                
-                # 상세 분석
-                col1, col2, col3 = st.columns(3)
-                
-                # 상승/하락 비율
-                with col1:
-                    st.markdown("### 📈 상승/하락 비율")
-                    ad = summary['advance_decline']
-                    if 'error' not in ad:
-                        st.metric("상승 종목", f"{ad['advancing']}개")
-                        st.metric("하락 종목", f"{ad['declining']}개")
-                        st.metric("상승/하락 비율", f"{ad['ratio']:.2f}")
-                        st.markdown(f"**{ad['breadth_status']}**")
-                    else:
-                        st.warning(ad['error'])
-                
-                # 신고가/신저가
-                with col2:
-                    st.markdown("### 🔝 52주 신고가/신저가")
-                    hl = summary['new_high_low']
-                    if 'error' not in hl:
-                        st.metric("신고가 종목", f"{hl['new_highs']}개")
-                        st.metric("신저가 종목", f"{hl['new_lows']}개")
-                        st.metric("신고가/신저가 비율", f"{hl['ratio']:.2f}")
-                        st.markdown(f"**{hl['status']}**")
-                    else:
-                        st.warning(hl['error'])
-                
-                # 집중도
-                with col3:
-                    st.markdown("### 🎯 시장 집중도")
-                    conc = summary['concentration']
-                    if 'error' not in conc:
-                        st.metric("상위 10종목 수익률", f"{conc['top10_return']:.1f}%")
-                        st.metric("전체 시장 수익률", f"{conc['market_return']:.1f}%")
-                        st.metric("집중도 비율", f"{conc['concentration_ratio']:.1f}배")
-                        st.markdown(f"**{conc['warning']}**")
-                    else:
-                        st.warning(conc['error'])
-                
-                # 해석 가이드
-                st.markdown("---")
-                st.markdown("### 📖 해석 가이드")
-                st.markdown("""
-                - **시장 체력 점수 70+**: 🟢 건강한 시장, 상승 종목이 많고 폭넓은 참여
-                - **시장 체력 점수 40-70**: 🟡 중립, 일부 섹터만 강세
-                - **시장 체력 점수 40 미만**: 🔴 취약, 소수 대형주만 지수 견인 (주의!)
-                - **VIX 15 미만**: 🟢 안정, 시장 불안 낮음
-                - **VIX 25 이상**: 🔴 공포, 변동성 확대 예상
-                """)
-                
-            except Exception as e:
-                st.error(f"분석 중 오류 발생: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+# [Phase 2] display_social_trend은 views 모듈로 이동됨
 
 
-def display_social_trend():
-    """
-    [DEPRECATED] 소셜 트렌드 분석 뷰 (Google Trends 기반)
-    
-    ⚠️ DEPRECATED: Phase 21에서 Market Buzz로 대체됨
-    이 함수는 더 이상 사용되지 않으며, 향후 버전에서 제거될 예정입니다.
-    새로운 기능: src.dashboard.views.market_buzz_view.render_market_buzz_tab()
-    """
-    st.warning("⚠️ 이 기능은 더 이상 사용되지 않습니다. '🔥 Market Buzz' 탭을 이용해주세요.")
-    st.subheader("📈 소셜 트렌드 분석")
-    st.markdown("Google Trends를 활용하여 종목의 검색 관심도와 밈주식 가능성을 분석합니다.")
-    
-    # 초보자 힌트
-    with st.expander("💡 소셜 트렌드 분석이란?", expanded=False):
-        st.markdown("""
-        **소셜 트렌드 분석**은 특정 종목이 얼마나 많은 관심을 받고 있는지 측정합니다.
-        
-        - **Google Trends**: 검색량 변화를 추적
-        - **밈주식 감지**: 갑작스러운 관심 폭발 감지
-        - **투자 타이밍**: 관심도 급등 시 주의 필요 (이미 늦었을 수 있음)
-        
-        ⚠️ **주의**: 관심도 급등 ≠ 매수 신호. 오히려 과열 신호일 수 있습니다.
-        """)
-    
-    # 종목 선택
-    stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-    selected_stock = st.selectbox(
-        "분석할 종목 선택",
-        options=stock_options[:50],  # 상위 50개만
-        key="social_trend_stock"
-    )
-    
-    # 종목 코드 추출
-    stock_dict = st.session_state.get('active_stock_list', {})
-    ticker = stock_dict.get(selected_stock, "005930")
-    
-    # 분석 기간
-    period_options = {"1개월": "today 1-m", "3개월": "today 3-m", "12개월": "today 12-m"}
-    period = st.selectbox("분석 기간", list(period_options.keys()), index=1)
-    
-    if st.button("🔍 트렌드 분석 시작", type="primary"):
-        with st.spinner("Google Trends 데이터 수집 중..."):
-            try:
-                from src.services.social_trend_service import GoogleTrendsAnalyzer, SocialTrendAnalyzer
-                
-                # 종목명 추출 (괄호 앞)
-                stock_name = selected_stock.split(" (")[0] if " (" in selected_stock else selected_stock
-                
-                # Google Trends 분석
-                trends = GoogleTrendsAnalyzer()
-                timeframe = period_options[period]
-                
-                # 시장별 지역 설정
-                current_market = st.session_state.get('current_market', 'KR')
-                geo = "KR" if current_market == "KR" else "US"
-                
-                # 1차 검색: 종목명
-                trend_data = trends.get_interest_over_time(
-                    stock_name, 
-                    timeframe=timeframe,
-                    geo=geo
-                )
-                
-                # 실패 시 2차 검색: 티커
-                if trend_data.empty:
-                    ticker_clean = ticker.split('.')[0]  # .KS, .T 제거
-                    st.warning(f"'{stock_name}' 검색 결과가 없어 '{ticker_clean}'(으)로 재시도합니다.")
-                    trend_data = trends.get_interest_over_time(
-                        ticker_clean, 
-                        timeframe=timeframe, 
-                        geo=geo
-                    )
-                    stock_name = ticker_clean  # 차트 라벨 변경
-                
-                if trend_data is not None and not trend_data.empty:
-                    # 관심도 차트
-                    st.markdown("### 📊 검색 관심도 추이")
-                    
-                    import plotly.express as px
-                    fig = px.line(
-                        trend_data, 
-                        x=trend_data.index, 
-                        y=stock_name,
-                        title=f"'{stock_name}' Google 검색 관심도"
-                    )
-                    fig.update_layout(
-                        template='plotly_dark',
-                        xaxis_title="날짜",
-                        yaxis_title="관심도 (0-100)"
-                    )
-                    st.plotly_chart(fig, width="stretch")
-                    
-                    # 통계
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        current = trend_data[stock_name].iloc[-1]
-                        avg = trend_data[stock_name].mean()
-                        st.metric(
-                            label="현재 관심도",
-                            value=f"{current:.0f}",
-                            delta=f"{current - avg:.1f} (평균 대비)"
-                        )
-                    
-                    with col2:
-                        max_interest = trend_data[stock_name].max()
-                        st.metric(
-                            label="최고 관심도",
-                            value=f"{max_interest:.0f}"
-                        )
-                    
-                    with col3:
-                        # 밈주식 경고
-                        recent_spike = current > avg * 2
-                        if recent_spike:
-                            st.metric(
-                                label="🚨 밈주식 경고",
-                                value="주의!"
-                            )
-                            st.warning("관심도가 평균의 2배 이상입니다. 과열 가능성!")
-                        else:
-                            st.metric(
-                                label="상태",
-                                value="정상"
-                            )
-                    
-                    # 소셜 트렌드 분석
-                    st.markdown("---")
-                    st.markdown("### 🎯 투자 타이밍 분석")
-                    
-                    social = SocialTrendAnalyzer()
-                    analysis = social.analyze_stock_buzz(ticker)
-                    
-                    if analysis:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("종합 점수", f"{analysis.get('buzz_score', 'N/A')}/100")
-                        with col2:
-                            sentiment = analysis.get('sentiment', 'neutral')
-                            sentiment_emoji = "🟢" if sentiment == "positive" else "🔴" if sentiment == "negative" else "🟡"
-                            st.metric("감성", f"{sentiment_emoji} {sentiment}")
-                        
-                        # 추천
-                        if analysis.get('is_meme_stock', False):
-                            st.error("🚨 **밈주식 가능성 높음!** 투기적 움직임에 주의하세요.")
-                        elif current > avg * 1.5:
-                            st.warning("⚠️ 관심도가 높습니다. 이미 상승했을 수 있으니 신중하게 접근하세요.")
-                        else:
-                            st.success("✅ 관심도가 정상 범위입니다.")
-                else:
-                    st.error("❌ Google Trends 데이터 검색 실패")
-                    st.markdown("""
-                    **데이터를 찾지 못하는 가능한 원인:**
-                    1. **API 호출 제한 (429 Error)**: 짧은 시간 내 과도한 요청 시 Google이 일시 차단할 수 있습니다.
-                    2. **데이터 부족**: 해당 키워드의 검색량이 너무 적을 수 있습니다.
-                    3. **검색어 불일치**: 종목명이 Google Trends 주제와 다를 수 있습니다.
-                    
-                    💡 **팁**: 1~2분 정도 기다렸다가 다시 시도하거나, 아래 버튼을 통해 **Google Trends 웹사이트에서 직접 확인**하실 수 있습니다.
-                    """)
-                    
-                    try:
-                        import urllib.parse
-                        encoded_term = urllib.parse.quote(stock_name)
-                        # 기본 기간: 3개월, 국가: KR
-                        url = f"https://trends.google.co.kr/trends/explore?date=today%203-m&geo=KR&q={encoded_term}"
-                        st.link_button("🌏 Google Trends 웹사이트에서 결과 보기", url, type="primary")
-                    except:
-                        pass
-                    
-            except Exception as e:
-                st.error(f"분석 중 오류 발생: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+# [Phase 2] display_factor_investing은 views 모듈로 이동됨
 
 
-def display_factor_investing():
-    """팩터 투자 분석 뷰 (Fama-French 5 Factor)"""
-    st.subheader("💎 팩터 투자 (Factor Investing)")
-    st.markdown("Fama-French 5팩터 모델과 저변동성 팩터를 기반으로 종목을 분석합니다.")
-    
-    # 팩터 설명
-    with st.expander("💡 팩터(Factor)란?", expanded=False):
-        st.markdown("""
-        **주식 수익률을 설명하는 공통적인 요인**입니다.
-        
-        1. **Momentum (모멘텀)**: 최근 12개월 수익률이 높은 주식 (추세 추종)
-        2. **Value (가치)**: PER, PBR이 낮은 저평가 주식
-        3. **Quality (품질)**: ROE, 이익률이 높은 우량 주식
-        4. **Size (규모)**: 시가총액이 작은 중소형주 (성장 잠재력)
-        5. **Volatility (저변동성)**: 주가 변동폭이 작은 안정적인 주식
-        """)
-    
-    current_market = st.session_state.get('current_market', 'KR')
-    market_code = "US" if current_market == "US" else "KR"
-    
-    tab1, tab2 = st.tabs(["📊 개별 종목 분석", "🔍 팩터 스크리닝"])
-    
-    with tab1:
-        st.markdown("##### 개별 종목 팩터 점수")
-        
-        stock_options = st.session_state.get('active_stock_names', ["삼성전자 (005930)"])
-        selected_stock = st.selectbox(
-            "분석할 종목 선택",
-            options=stock_options,
-            key="factor_stock_select"
-        )
-        
-        # 종목 코드 추출
-        stock_dict = st.session_state.get('active_stock_list', {})
-        if current_market == "US":
-            ticker = stock_dict.get(selected_stock, "AAPL")
-        else:
-            ticker = stock_dict.get(selected_stock, "005930") + ".KS"
-            
-        if st.button("🧬 팩터 분석 실행", key="run_factor_single", type="primary"):
-            with st.status("🧬 5팩터 분석 모델 가동 중...", expanded=True) as status:
-                status.write("📊 재무/주가 데이터 수집 중...")
-                try:
-                    from src.services.factor_analysis_service import FactorAnalyzer
-                    
-                    # Repository에서 데이터 조회 (yfinance_repo 사용)
-                    stock = yfinance_repo.get_stock_data(ticker, period="2y") # 모멘텀 위해 1년 이상 필요
-                    stock_info = yfinance_repo.get_stock_info(ticker)
-                    
-                    if not stock:
-                        st.error("데이터를 가져올 수 없습니다.")
-                        return
-                        
-                    analyzer = FactorAnalyzer(market=market_code)
-                    scores = analyzer.analyze(stock, stock_info)
-                    
-                    # 결과 시각화 (Radar Chart)
-                    st.markdown(f"### {selected_stock.split(' (')[0]} 팩터 점수: **{scores.composite:.1f}**")
-                    
-                    categories = ['Momentum', 'Value', 'Quality', 'Size', 'Volatility']
-                    values = [scores.momentum, scores.value, scores.quality, scores.size, scores.volatility]
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatterpolar(
-                        r=values,
-                        theta=categories,
-                        fill='toself',
-                        name=selected_stock
-                    ))
-                    fig.update_layout(
-                        polar=dict(
-                            radialaxis=dict(
-                                visible=True,
-                                range=[0, 100]
-                            )),
-                        showlegend=False,
-                        template="plotly_dark",
-                        title="5-Factor Radar Chart"
-                    )
-                    st.plotly_chart(fig, width="stretch")
-                    
-                    # 세부 점수 카드
-                    c1, c2, c3, c4, c5 = st.columns(5)
-                    c1.metric("🚀 모멘텀", f"{scores.momentum:.0f}")
-                    c2.metric("💰 가치", f"{scores.value:.0f}")
-                    c3.metric("💎 품질", f"{scores.quality:.0f}")
-                    c4.metric("🐜 규모", f"{scores.size:.0f}")
-                    c5.metric("🛡️ 저변동성", f"{scores.volatility:.0f}")
-                    status.update(label="✅ 분석 완료!", state="complete", expanded=False)
-                    
-                except Exception as e:
-                    st.error(f"분석 중 오류 발생: {str(e)}")
-                    # import traceback
-                    # st.code(traceback.format_exc())
-
-    with tab2:
-        st.markdown("##### 팩터 기반 유망 종목 발굴")
-        st.info("상위 10개 종목을 분석하여 팩터 점수 순위를 매깁니다. (속도를 위해 샘플 종목만 분석)")
-        
-        # 샘플 종목 (속도 문제로 전체 스크리닝은 제한)
-        sample_stocks = stock_options[:20] # 상위 20개만
-        target_stocks = st.multiselect(
-            "분석 대상 종목 (최대 10개)",
-            sample_stocks,
-            default=sample_stocks[:5],
-            max_selections=10
-        )
-        
-        sort_by = st.selectbox(
-            "정렬 기준", 
-            ["composite", "momentum", "value", "quality", "size", "volatility"],
-            format_func=lambda x: {
-                "composite": "종합 점수", "momentum": "모멘텀", "value": "가치", 
-                "quality": "품질", "size": "규모", "volatility": "저변동성"
-            }[x]
-        )
-        
-        if st.button("🔍 스크리닝 실행", key="run_factor_screen", type="primary"):
-            with st.spinner(f"{len(target_stocks)}개 종목 분석 중..."):
-                try:
-                    from src.services.factor_analysis_service import FactorScreener
-                    
-                    # Repository 주입
-                    screener = FactorScreener(stock_repo=yfinance_repo, market=market_code)
-                    
-                    # Ticker 변환
-                    tickers = []
-                    name_map = {}
-                    for s in target_stocks:
-                        if current_market == "US":
-                            t = stock_dict.get(s, "AAPL")
-                        else:
-                            t = stock_dict.get(s, "005930") + ".KS"
-                        tickers.append(t)
-                        name_map[t] = s.split(" (")[0]
-                    
-                    results = screener.screen_top_stocks(tickers, top_n=len(tickers), sort_by=sort_by)
-                    
-                    # 결과 테이블
-                    data = []
-                    for r in results:
-                        data.append({
-                            "종목명": name_map.get(r.ticker, r.ticker),
-                            "종합 점수": r.composite,
-                            "모멘텀": r.momentum,
-                            "가치": r.value,
-                            "품질": r.quality,
-                            "규모": r.size,
-                            "저변동성": r.volatility
-                        })
-                    
-                    df = pd.DataFrame(data)
-                    st.dataframe(
-                        df.style.background_gradient(cmap="RdYlGn", subset=["종합 점수"]),
-                        hide_index=True,
-                        width="stretch"
-                    )
-                    
-                except Exception as e:
-                    st.error(f"스크리닝 오류: {str(e)}")
-
-
+# 앱 실행
 if __name__ == "__main__":
     main()

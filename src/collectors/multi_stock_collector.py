@@ -4,12 +4,6 @@
 import pandas as pd
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-import sys
-
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import DEFAULT_TICKERS, US_TICKERS, DEFAULT_PERIOD
 from src.collectors.stock_collector import StockDataCollector
@@ -168,6 +162,8 @@ class MultiStockCollector:
         for ticker, df in self.results.items():
             if 'close' in df.columns and 'date' in df.columns:
                 df = df.sort_values('date')
+                if df.empty:
+                    continue
                 first_close = df['close'].iloc[0]
                 returns_data[ticker] = (df.set_index('date')['close'] / first_close * 100)
         

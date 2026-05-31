@@ -3,14 +3,8 @@ Legacy Adapter - Strangler Fig Pattern
 기존 collectors/, analyzers/ 모듈을 새 인터페이스로 래핑
 점진적 마이그레이션을 위한 어댑터
 """
-import sys
-from pathlib import Path
 from typing import List, Optional, Dict
 from datetime import datetime
-
-# 기존 코드 경로 추가
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.domain.repositories.interfaces import IStockRepository, INewsRepository
 from src.domain.entities.stock import StockEntity, SignalEntity
