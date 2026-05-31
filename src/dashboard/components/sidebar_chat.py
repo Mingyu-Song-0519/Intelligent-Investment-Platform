@@ -248,7 +248,7 @@ def _test_api_key(api_key: str) -> tuple[bool, str]:
                     )
                     if res and res.text:
                         return True, f"연결 성공! ({model_name} 사용)"
-                except:
+                except Exception as e:
                     continue
 
             try:

@@ -38,9 +38,9 @@ class MarketBreadthAnalyzer:
         cache_key = f"{self.market}_{days}"
         
         # 캐시 확인
-        if (cache_key in self._cache and 
+        if (cache_key in self._cache and
             self._cache_timestamp and
-            (now - self._cache_timestamp).seconds < self._cache_ttl):
+            (now - self._cache_timestamp).total_seconds() < self._cache_ttl):
             return self._cache[cache_key]
         
         try:

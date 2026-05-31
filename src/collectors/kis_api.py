@@ -85,7 +85,7 @@ class KisApi:
             self.access_token = data['access_token']
             # 토큰 유효기간 (보통 24시간이지만 안전하게 12시간으로 설정)
             self.token_expired = datetime.now() + timedelta(hours=12)
-            print(f"[INFO] Access Token 발급 성공 (만료: {data['access_token_token_expired']})")
+            print(f"[INFO] Access Token 발급 성공 (만료: {data.get('access_token_token_expired', 'N/A')})")
             
             # 파일 저장
             self.save_token()

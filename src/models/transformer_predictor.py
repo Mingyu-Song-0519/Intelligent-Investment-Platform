@@ -236,6 +236,9 @@ class TransformerPredictor:
             raise ValueError("모델이 학습되지 않았습니다")
         
         # 마지막 시퀀스 추출
+        missing_cols = [col for col in self.feature_columns if col not in df.columns]
+        if missing_cols:
+            raise ValueError(f"누락된 컬럼: {missing_cols}")
         data = df[self.feature_columns].dropna().values
         
         if len(data) < self.sequence_length:
@@ -252,8 +255,10 @@ class TransformerPredictor:
         # 역정규화
         y_pred = self.scaler_y.inverse_transform(y_pred_scaled)
         predicted_price = float(y_pred[0, 0])
-        
+
         # 예측값 클리핑 (전일 종가 대비 ±30% 제한 - 한국 시장 기준)
+        if df.empty:
+            return None
         current_price = df['close'].iloc[-1]
         max_price = current_price * 1.30
         min_price = current_price * 0.70
@@ -267,6 +272,8 @@ class TransformerPredictor:
     
     def predict_direction(self, df: pd.DataFrame) -> Dict:
         """방향 예측 (상승/하락)"""
+        if df.empty:
+            return None
         current_price = df['close'].iloc[-1]
         predicted_price = self.predict(df)
         

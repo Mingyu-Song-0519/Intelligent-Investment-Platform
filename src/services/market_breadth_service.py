@@ -40,7 +40,7 @@ class MarketBreadthAnalyzer:
         # 캐시 확인
         if (cache_key in self._cache and 
             self._cache_timestamp and
-            (now - self._cache_timestamp).seconds < self._cache_ttl):
+            (now - self._cache_timestamp).total_seconds() < self._cache_ttl):
             return self._cache[cache_key]
         
         try:

@@ -301,7 +301,7 @@ class PyKRXGateway:
                                         right_on='티커',
                                         how='left'
                                     ).drop(columns=['티커'], errors='ignore')
-                        except:
+                        except Exception:
                             # 등락률 없어도 OK
                             pass
 

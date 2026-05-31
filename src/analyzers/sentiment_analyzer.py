@@ -239,7 +239,7 @@ class SentimentAnalyzer:
             try:
                 blob = TextBlob(clean_text)
                 score = blob.sentiment.polarity
-            except:
+            except Exception:
                 pass
         
         # 3. 한국어 금융 키워드 보정 (간단한 규칙)

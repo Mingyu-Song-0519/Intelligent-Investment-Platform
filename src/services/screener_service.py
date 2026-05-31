@@ -112,7 +112,8 @@ class ScreenerService:
         if market == "KR" and self.pykrx_gateway:
             snapshot_kospi = self.pykrx_gateway.get_market_snapshot("KOSPI")
             snapshot_kosdaq = self.pykrx_gateway.get_market_snapshot("KOSDAQ")
-            snapshot = pd.concat([snapshot_kospi, snapshot_kosdaq]) if snapshot_kospi is not None else snapshot_kosdaq
+            dfs = [df for df in [snapshot_kospi, snapshot_kosdaq] if df is not None]
+            snapshot = pd.concat(dfs) if dfs else None
         else:
             # US 또는 폴백: 기존 유니버스 방식 사용
             all_tickers = self._get_stock_universe(market)
@@ -179,6 +180,9 @@ class ScreenerService:
         logger.info(f"[Screener] Stage 2: Data ready for {len(ohlcv_dict)} stocks. Starting calculation...")
 
         # 2.2: 벡터화 기술적 지표 계산
+        if not ohlcv_dict:
+            logger.warning("[Screener] No OHLCV data available for calculation.")
+            return []
         combined_df = pd.concat([df.assign(ticker=t) for t, df in ohlcv_dict.items()])
         combined_df.index.name = 'date'
         combined_df = combined_df.reset_index().set_index(['ticker', 'date'])
@@ -213,7 +217,8 @@ class ScreenerService:
             streak = False
             if ticker in investor_data:
                 df = investor_data[ticker]
-                streak = (df.tail(3)['기관순매수'] > 0).all()
+                if not df.empty and '기관순매수' in df.columns:
+                    streak = (df.tail(3)['기관순매수'] > 0).all()
 
             # 펀더멘털 (Lazy Fetch for screened stocks only)
             fundamental = self.pykrx_gateway.get_stock_fundamental(ticker) if self.pykrx_gateway else {}
@@ -386,11 +391,11 @@ class ScreenerService:
                             ticker, days=20, streak_days=3
                         )
                         institution_streak = streak.get('institution_streak', False)
-                        
+
                         # 기관이 3일 연속 매수하지 않으면 제외
                         if not institution_streak:
                             passes_filters = False
-                    except:
+                    except (ValueError, KeyError, TypeError):
                         pass
                 
                 if passes_filters:
@@ -456,6 +461,9 @@ class ScreenerService:
             else:
                 stock_name = info.get('shortName', ticker)
             
+            if close.empty:
+                return None
+
             return {
                 'stock_name': stock_name,
                 'current_price': close.iloc[-1],

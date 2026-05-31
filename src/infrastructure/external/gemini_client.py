@@ -6,6 +6,7 @@ Clean Architecture: Infrastructure Layer
 from abc import ABC, abstractmethod
 from typing import Optional
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ class GeminiClient(ILLMClient):
     - 일 1,500회 요청 (RPD)
     """
     
+    # 클래스 레벨 캐시: 모델 목록을 한 번만 조회
+    _cached_models: Optional[list] = None
+    
     def __init__(self, api_key: Optional[str] = None):
         """
         Args:
@@ -74,14 +78,20 @@ class GeminiClient(ILLMClient):
             # 신규 API: Client 생성
             self.client = genai.Client(api_key=self.api_key)
             
-            # 모델 목록 로드 및 선정
+            # 모델 목록 로드 및 선정 (캐시 사용으로 API 호출 최소화)
             try:
-                available_models = []
-                for m in self.client.models.list():
-                    # 신규/구버전 SDK 속성 대응
-                    methods = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_methods', [])
-                    if 'generateContent' in methods or 'gemini' in m.name.lower():
-                        available_models.append(m.name.split('/')[-1])
+                if GeminiClient._cached_models is not None:
+                    available_models = GeminiClient._cached_models
+                    logger.info(f"[GeminiClient] Using cached model list ({len(available_models)} models)")
+                else:
+                    available_models = []
+                    for m in self.client.models.list():
+                        # 신규/구버전 SDK 속성 대응
+                        methods = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_methods', [])
+                        if 'generateContent' in methods or 'gemini' in m.name.lower():
+                            available_models.append(m.name.split('/')[-1])
+                    GeminiClient._cached_models = available_models
+                    logger.info(f"[GeminiClient] Fetched and cached {len(available_models)} models")
                 
                 if 'gemini-2.0-flash' in available_models:
                     self.selected_model_name = 'gemini-2.0-flash'
@@ -106,7 +116,7 @@ class GeminiClient(ILLMClient):
                     if preferred:
                         self.selected_model_name = preferred
                         logger.info(f"[GeminiClient] Overridden by session state: {self.selected_model_name}")
-            except:
+            except Exception:
                 pass
                 
             self._initialized = True
@@ -125,7 +135,7 @@ class GeminiClient(ILLMClient):
             import streamlit as st
             if hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
                 return st.secrets['GEMINI_API_KEY']
-        except:
+        except Exception:
             pass
         
         # 2. 환경변수
@@ -146,39 +156,53 @@ class GeminiClient(ILLMClient):
         if not self._initialized or self.client is None:
             raise RuntimeError("GeminiClient not initialized. Check API key.")
         
-        try:
-            from google import genai
-            
-            # 신규 API: GenerateContentConfig 사용
-            if system_instruction:
-                config = genai.types.GenerateContentConfig(
-                    system_instruction=system_instruction
-                )
-                response = self.client.models.generate_content(
-                    model=self.selected_model_name,
-                    contents=prompt,
-                    config=config
-                )
-            else:
-                response = self.client.models.generate_content(
-                    model=self.selected_model_name,
-                    contents=prompt
-                )
-            
-            # 응답이 비어있거나 차단된 경우 처리
-            if not response or not hasattr(response, 'text'):
-                # candidate 피드백 확인
-                if response.candidates and response.candidates[0].finish_reason:
-                    reason = response.candidates[0].finish_reason
-                    logger.warning(f"[GeminiClient] Blocked: {reason}")
-                    return f"죄송합니다. 서비스 정책상 답변을 드릴 수 없습니다. (사유: {reason})"
-                return "AI가 응답을 생성하지 못했습니다."
+        # 429 RESOURCE_EXHAUSTED 에러 시 최대 3회 재시도 (exponential backoff)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                from google import genai
                 
-            return response.text
-            
-        except Exception as e:
-            logger.error(f"[GeminiClient] Generation failed: {e}")
-            raise
+                # 신규 API: GenerateContentConfig 사용
+                if system_instruction:
+                    config = genai.types.GenerateContentConfig(
+                        system_instruction=system_instruction
+                    )
+                    response = self.client.models.generate_content(
+                        model=self.selected_model_name,
+                        contents=prompt,
+                        config=config
+                    )
+                else:
+                    response = self.client.models.generate_content(
+                        model=self.selected_model_name,
+                        contents=prompt
+                    )
+                
+                # 응답이 비어있거나 차단된 경우 처리
+                if not response or not hasattr(response, 'text'):
+                    # candidate 피드백 확인
+                    if response.candidates and response.candidates[0].finish_reason:
+                        reason = response.candidates[0].finish_reason
+                        logger.warning(f"[GeminiClient] Blocked: {reason}")
+                        return f"죄송합니다. 서비스 정책상 답변을 드릴 수 없습니다. (사유: {reason})"
+                    return "AI가 응답을 생성하지 못했습니다."
+                    
+                return response.text
+                
+            except Exception as e:
+                error_str = str(e)
+                # 429 Rate Limit 에러 시 재시도
+                if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+                    wait_time = (attempt + 1) * 5  # 5초, 10초, 15초
+                    logger.warning(f"[GeminiClient] Rate limit hit (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                
+                logger.error(f"[GeminiClient] Generation failed: {e}")
+                raise
+        
+        # 모든 재시도 실패
+        raise RuntimeError("Gemini API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.")
 
     
     def is_available(self) -> bool:
@@ -215,21 +239,53 @@ class GeminiClient(ILLMClient):
 
 class MockLLMClient(ILLMClient):
     """
-    테스트용 Mock LLM 클라이언트
+    데모 모드용 Mock LLM 클라이언트
     
-    개발/테스트 시 API 호출 없이 사용
+    API 키 미설정시 사용자에게 유용한 데모 응답 제공
     """
     
-    def __init__(self, default_response: str = "Mock response"):
-        self.default_response = default_response
+    DEMO_RESPONSES = {
+        # 기능 안내
+        "삼성전자": "삼성전자(005930)는 반도체, 가전, 모바일 사업을 영위하는 대한민국 대표 기업입니다. 📊 상세 분석은 '단일 종목 분석' 탭에서 확인하세요.",
+        "매수": "📈 매매 시그널을 확인하려면 '단일 종목 분석' 탭에서 기술적 지표(RSI, MACD, 볼린저밴드)를 확인해보세요.",
+        "매도": "📉 매도 타이밍 분석은 '단일 종목 분석' 탭의 매매 시그널에서 확인할 수 있습니다.",
+        "추천": "🌅 AI 종목 추천은 'AI 종목 추천' 탭에서 이용하실 수 있습니다. 전체 기능은 API 키 설정 후 사용 가능합니다.",
+        "포트폴리오": "💼 포트폴리오 최적화는 '포트폴리오 최적화' 탭에서 확인하세요.",
+        "리스크": "⚠️ 리스크 분석은 '리스크 관리' 탭에서 VaR, MDD 등을 확인할 수 있습니다.",
+        "백테스트": "⏮️ 전략 백테스팅은 '백테스팅' 탭에서 이용하세요.",
+        "뉴스": "📰 뉴스 감성 분석은 '뉴스 감성 분석' 탭에서 확인하세요.",
+    }
+    
+    DEFAULT_RESPONSE = """💡 **데모 모드** 입니다.
+
+현재 AI 기능을 체험 중입니다. 전체 기능을 사용하려면:
+
+1. 사이드바 상단 **'🔑 AI API 설정'** 클릭
+2. Gemini API 키 입력
+3. 연결 테스트
+
+🔗 무료 API 키는 [Google AI Studio](https://aistudio.google.com)에서 발급받을 수 있습니다.
+
+---
+💬 데모 모드에서도 다음 질문에 답변할 수 있어요:
+- "삼성전자 분석해줘"
+- "매수 타이밍 알려줘"
+- "포트폴리오 최적화 방법"
+"""
+    
+    def __init__(self, default_response: str = None):
+        self.default_response = default_response or self.DEFAULT_RESPONSE
     
     def generate(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        """Mock 응답 반환"""
-        return f"""신호: BUY
-신뢰도: 75
-요약: 이 종목은 기술적으로 상승 추세에 있으며, 감성 분석 결과도 긍정적입니다.
-논리: RSI가 과매도 구간을 벗어나 상승 중이며, 최근 뉴스 감성이 긍정적입니다. 거래량도 증가 추세입니다.
-"""
+        """키워드 매칭으로 데모 응답 반환"""
+        prompt_lower = prompt.lower()
+        
+        # 키워드 매칭
+        for keyword, response in self.DEMO_RESPONSES.items():
+            if keyword.lower() in prompt_lower:
+                return f"💡 **데모 응답** (API 키 설정 시 더 정확한 분석 제공)\n\n{response}"
+        
+        return self.default_response
     
     def is_available(self) -> bool:
         """항상 사용 가능"""

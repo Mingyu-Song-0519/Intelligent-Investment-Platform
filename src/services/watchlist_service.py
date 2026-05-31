@@ -259,7 +259,7 @@ class WatchlistService:
         # 캐시 확인
         if ticker in self._price_cache:
             data, cached_time = self._price_cache[ticker]
-            if (datetime.now() - cached_time).seconds < self._cache_ttl:
+            if (datetime.now() - cached_time).total_seconds() < self._cache_ttl:
                 return data
         
         try:
@@ -312,7 +312,9 @@ class WatchlistService:
         deltas = prices.diff()
         gain = (deltas.where(deltas > 0, 0)).rolling(window=period).mean()
         loss = (-deltas.where(deltas < 0, 0)).rolling(window=period).mean()
-        
+
+        if loss.iloc[-1] == 0:
+            return 100.0
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs))
         
@@ -400,7 +402,7 @@ class WatchlistService:
                     # 범위 밖이면 거리에 따라 감점
                     distance = min(abs(volatility - ideal_min), abs(volatility - ideal_max))
                     score += max(20, 40 - distance * 80)
-            except:
+            except (ValueError, KeyError, TypeError):
                 # 변동성 기반 기본 계산
                 if risk_value <= 40:  # 안정형
                     score += max(20, 40 - volatility * 30)
@@ -416,7 +418,7 @@ class WatchlistService:
                     score += 30  # 프로필에 섹터 선호가 있으면 기본 점수
                 else:
                     score += 35
-            except:
+            except (ValueError, KeyError, TypeError):
                 score += 30
             
             # 3. 위험 감수 레벨 매칭 (20점)
@@ -461,9 +463,9 @@ class WatchlistService:
                 return f"⚠️ 이 종목은 {profile_type} 투자자에게 적합하지 않을 수 있습니다."
             elif fit_score < 60:
                 return f"💡 {profile_type} 투자자는 신중한 검토가 필요합니다."
-            
-        except Exception:
-            pass
+
+        except Exception as e:
+            logger.debug(f"Profile fit message generation failed: {e}")
         
         return None
     

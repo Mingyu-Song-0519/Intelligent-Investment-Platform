@@ -36,7 +36,7 @@ class PortfolioManagementService:
         self,
         portfolio_id: str,
         name: str,
-        holdings: Dict[str, float] = {},
+        holdings: Optional[Dict[str, float]] = None,
         normalize: bool = True
     ) -> PortfolioEntity:
         """
@@ -51,6 +51,8 @@ class PortfolioManagementService:
         Returns:
             PortfolioEntity
         """
+        if holdings is None:
+            holdings = {}
         portfolio = PortfolioEntity(
             portfolio_id=portfolio_id,
             name=name,

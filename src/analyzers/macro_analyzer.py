@@ -65,7 +65,7 @@ class MacroAnalyzer:
         cache_key = f"{ticker}_{period}"
         if cache_key in self._cache:
             cache_data = self._cache[cache_key]
-            if (datetime.now() - cache_data['timestamp']).seconds < self._cache_ttl:
+            if (datetime.now() - cache_data['timestamp']).total_seconds() < self._cache_ttl:
                 return cache_data['data']
         
         try:

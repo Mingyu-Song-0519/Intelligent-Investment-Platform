@@ -98,7 +98,7 @@ class YFinanceStockRepository(IStockRepository):
         # 캐시 확인
         if cache_key in self._cache:
             data, timestamp = self._cache[cache_key]
-            if (datetime.now() - timestamp).seconds < self._cache_ttl:
+            if (datetime.now() - timestamp).total_seconds() < self._cache_ttl:
                 return data
         
         try:
@@ -270,7 +270,7 @@ class YFinanceStockRepository(IStockRepository):
             cache_key = f"{ticker}_saved"
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
-                if (datetime.now() - timestamp).seconds < self._cache_ttl:
+                if (datetime.now() - timestamp).total_seconds() < self._cache_ttl:
                     return data
             
             # 2. DB에서 로드 (db_path가 있을 때)

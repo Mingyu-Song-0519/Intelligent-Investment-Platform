@@ -9,7 +9,7 @@ Clean Architecture:
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from src.collectors.news_collector import NewsCollector
 from src.analyzers.sentiment_analyzer import SentimentAnalyzer
 
@@ -170,26 +170,52 @@ class SentimentAnalysisService:
         return df
     
     def _collect_kr_news(self, ticker: str, stock_name: str) -> List[Dict]:
-        """한국 시장 뉴스 수집"""
+        """한국 시장 뉴스 수집 (네이버 + Google + 한국 언론사 RSS 통합, DB 캐시 활용)"""
         articles = []
         
         try:
-            # 네이버 금융 (ticker 코드 사용)
-            clean_ticker = ticker.split('.')[0]  # 005930.KS → 005930
-            naver_articles = self.news_collector.fetch_naver_finance_news(
+            # 종목 코드 정리 (005930.KS → 005930)
+            clean_ticker = ticker.split('.')[0]
+            
+            # 1. 통합 수집 및 DB 저장 (네이버 비활성화 - 뉴스 감성 분석 탭과 동일)
+            self.news_collector.collect_and_save(
                 ticker=clean_ticker,
-                max_pages=2
+                company_name=stock_name or ticker,
+                use_naver=False,       # 네이버 금융 비활성화 (뉴스 감성 분석 탭과 동일)
+                use_google=True,       # Google News RSS
+                use_korean_press=True, # 한국 언론사 RSS (매경/연합/한경)
+                max_pages=2,
+                max_items=20
             )
-            articles.extend(naver_articles)
             
-            # 구글 뉴스 (종목 이름 사용)
-            google_articles = self.news_collector.fetch_google_news_rss(
-                query=stock_name or ticker,
-                max_items=15
+            # 2. DB에서 뉴스 조회 (캐시 활용, naver_finance 제외)
+            db_news = self.news_collector.get_news(
+                clean_ticker,
+                limit=50,
+                exclude_sources=['naver_finance']
             )
-            articles.extend(google_articles)
             
-            print(f"[INFO] 네이버 금융 {len(naver_articles)}개 + 구글 {len(google_articles)}개 = 총 {len(articles)}개 뉴스 수집 완료")
+            if db_news:
+                articles = db_news
+                print(f"[INFO] DB에서 {len(articles)}개 뉴스 로드 완료 (종목: {stock_name})")
+            else:
+                # 3. Fallback: DB에 뉴스가 없으면 직접 수집
+                google_articles = self.news_collector.fetch_google_news_rss(
+                    query=stock_name or ticker,
+                    max_items=15
+                )
+                articles.extend(google_articles)
+                
+                # 한국 언론사 RSS도 직접 수집
+                if stock_name:
+                    press_articles = self.news_collector.fetch_korean_press_rss(
+                        company_name=stock_name,
+                        max_items=15
+                    )
+                    articles.extend(press_articles)
+                
+                print(f"[INFO] 직접 수집: Google {len(google_articles)}개 + 한국 언론사 RSS = 총 {len(articles)}개")
+                
         except Exception as e:
             print(f"[ERROR] 한국 뉴스 수집 실패: {e}")
         

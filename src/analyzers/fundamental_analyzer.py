@@ -27,9 +27,9 @@ class FundamentalAnalyzer:
         """yfinance에서 종목 정보 가져오기 (캐싱)"""
         now = datetime.now()
         
-        if (self._info is not None and 
+        if (self._info is not None and
             self._cache_timestamp is not None and
-            (now - self._cache_timestamp).seconds < self._cache_ttl):
+            (now - self._cache_timestamp).total_seconds() < self._cache_ttl):
             return self._info
         
         try:

@@ -7,6 +7,8 @@ Clean Architecture: Application Layer (Service)
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import numpy as np
+import threading
+import logging
 
 from src.domain.investment_profile.entities.investor_profile import InvestorProfile
 from src.domain.investment_profile.entities.recommendation import RankedStock
@@ -16,6 +18,9 @@ from src.domain.repositories.profile_interfaces import IProfileRepository
 # 모듈 수준 AI 예측 캐시 (앱 전체에서 공유)
 _AI_PREDICTION_CACHE: Dict[str, Tuple[float, str, float, datetime]] = {}
 _AI_CACHE_TTL_SECONDS = 3600  # 1시간
+_AI_CACHE_LOCK = threading.Lock()
+
+logger = logging.getLogger(__name__)
 
 
 class StockRankingService:
@@ -143,7 +148,7 @@ class StockRankingService:
         
         ranking, timestamp = self._user_ranking_cache[user_id]
         
-        if (datetime.now() - timestamp).seconds > self.cache_ttl:
+        if (datetime.now() - timestamp).total_seconds() > self.cache_ttl:
             del self._user_ranking_cache[user_id]
             return None
         
@@ -255,10 +260,10 @@ class StockRankingService:
                         score += 10
                     elif signals.get('bb_signal') == 'upper':
                         score -= 5
-                    
+
                     return min(100, max(0, score))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Calculation failed: {e}")
         
         # 폴백: 시뮬레이션
         np.random.seed(hash(ticker) % 2**32)
@@ -284,11 +289,11 @@ class StockRankingService:
                         # 연간 변동성 (일일 변동성 × √252)
                         daily_vol = returns.std()
                         annual_vol = daily_vol * np.sqrt(252)
-                        
+
                         # 0-100% 범위로 제한
                         return min(1.0, max(0.05, annual_vol))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Calculation failed: {e}")
         
         # 폴백: 섹터 기반 추정치
         return self.SECTOR_VOLATILITY.get(sector, 0.30)
@@ -296,12 +301,13 @@ class StockRankingService:
     def _get_ai_prediction(self, ticker: str) -> Tuple[float, str, float]:
         """AI 예측 점수 (EnsemblePredictor 사용)"""
         global _AI_PREDICTION_CACHE
-        
+
         # 캐시 확인
-        if ticker in _AI_PREDICTION_CACHE:
-            score, prediction, confidence, timestamp = _AI_PREDICTION_CACHE[ticker]
-            if (datetime.now() - timestamp).seconds < _AI_CACHE_TTL_SECONDS:
-                return score, prediction, confidence
+        with _AI_CACHE_LOCK:
+            if ticker in _AI_PREDICTION_CACHE:
+                score, prediction, confidence, timestamp = _AI_PREDICTION_CACHE[ticker]
+                if (datetime.now() - timestamp).total_seconds() < _AI_CACHE_TTL_SECONDS:
+                    return score, prediction, confidence
         
         # 실제 예측 수행
         if self.use_ai_model:
@@ -332,10 +338,11 @@ class StockRankingService:
                             # 예측값을 점수로 변환 (0-100 범위)
                             score = 50 + (prediction_val * confidence * 50)
                             score = min(100, max(0, score))
-                            
+
                             # 캐시 저장
-                            _AI_PREDICTION_CACHE[ticker] = (score, prediction, confidence, datetime.now())
-                            
+                            with _AI_CACHE_LOCK:
+                                _AI_PREDICTION_CACHE[ticker] = (score, prediction, confidence, datetime.now())
+
                             return score, prediction, confidence
             except Exception as e:
                 print(f"[WARNING] AI 예측 실패 ({ticker}): {e}")
@@ -356,9 +363,11 @@ class StockRankingService:
     
     def get_cache_stats(self) -> Dict:
         """캐시 통계"""
+        with _AI_CACHE_LOCK:
+            ai_cache_size = len(_AI_PREDICTION_CACHE)
         return {
             "user_ranking_cache_size": len(self._user_ranking_cache),
-            "ai_prediction_cache_size": len(_AI_PREDICTION_CACHE),
+            "ai_prediction_cache_size": ai_cache_size,
             "cache_ttl_seconds": self.cache_ttl,
             "use_ai_model": self.use_ai_model
         }
@@ -366,5 +375,6 @@ class StockRankingService:
     def clear_ai_cache(self) -> None:
         """AI 예측 캐시 초기화"""
         global _AI_PREDICTION_CACHE
-        _AI_PREDICTION_CACHE.clear()
+        with _AI_CACHE_LOCK:
+            _AI_PREDICTION_CACHE.clear()
 

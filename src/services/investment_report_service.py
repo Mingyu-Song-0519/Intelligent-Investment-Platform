@@ -130,7 +130,7 @@ class InvestmentReportService:
             try:
                 info = self.stock_repo.get_stock_info(ticker)
                 return info.get('name', ticker)
-            except:
+            except Exception:
                 pass
         
         # yfinance 폴백
@@ -139,20 +139,35 @@ class InvestmentReportService:
             stock = yf.Ticker(ticker)
             info = stock.info
             return info.get('shortName', info.get('longName', ticker))
-        except:
+        except Exception:
             return ticker
     
+    def _normalize_ticker(self, ticker: str) -> str:
+        """yfinance 호환 종목 코드로 변환 (한국 주식: .KS 접미사 추가)"""
+        if not ticker:
+            return ticker
+        # 이미 .KS/.KQ 접미사가 있으면 그대로
+        if ticker.endswith(('.KS', '.KQ')):
+            return ticker
+        # 숫자 6자리면 한국 주식 → .KS 추가
+        clean = ticker.split('.')[0]
+        if clean.isdigit() and len(clean) == 6:
+            return f"{clean}.KS"
+        return ticker
+    
     def _get_technical_data(self, ticker: str) -> Dict[str, Any]:
-        """기술적 분석 데이터 수집"""
+        """기술적 분석 데이터 수집 (3개월 기간, RSI/SMA/누적수익률 포함)"""
         try:
             import yfinance as yf
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="1mo")
+            yf_ticker = self._normalize_ticker(ticker)
+            stock = yf.Ticker(yf_ticker)
+            hist = stock.history(period="3mo")  # 3개월로 확장 (RSI 안정성 + 추세 반영)
             
             if hist.empty:
+                logger.warning(f"No data from yfinance for {yf_ticker}")
                 return {}
             
-            # RSI 계산
+            # RSI 계산 (14일)
             close = hist['Close']
             delta = close.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -160,10 +175,23 @@ class InvestmentReportService:
             rs = gain / loss
             rsi = 100 - (100 / (1 + rs))
             
-            # 현재가 및 변동률
+            # 현재가 및 전일 대비 변동률
             current_price = close.iloc[-1]
             prev_close = close.iloc[-2] if len(close) > 1 else current_price
             change_pct = ((current_price - prev_close) / prev_close * 100)
+            
+            # 누적 수익률 (1주, 1개월, 3개월)
+            cumulative_returns = {}
+            if len(close) >= 5:
+                cumulative_returns['1w'] = ((current_price / close.iloc[-5]) - 1) * 100
+            if len(close) >= 20:
+                cumulative_returns['1m'] = ((current_price / close.iloc[-20]) - 1) * 100
+            if len(close) >= 60:
+                cumulative_returns['3m'] = ((current_price / close.iloc[-60]) - 1) * 100
+            
+            # 이동평균선 (SMA)
+            sma_20 = close.rolling(window=20).mean().iloc[-1] if len(close) >= 20 else None
+            sma_60 = close.rolling(window=60).mean().iloc[-1] if len(close) >= 60 else None
             
             # 변동성 계산
             returns = close.pct_change().dropna()
@@ -172,7 +200,10 @@ class InvestmentReportService:
             return {
                 'current_price': current_price,
                 'change_pct': change_pct,
+                'cumulative_returns': cumulative_returns,
                 'rsi': rsi.iloc[-1] if not rsi.empty else None,
+                'sma_20': sma_20,
+                'sma_60': sma_60,
                 'volatility': volatility,
                 'volume': hist['Volume'].iloc[-1],
                 'avg_volume': hist['Volume'].mean()
@@ -238,21 +269,59 @@ class InvestmentReportService:
             rsi_val = technical.get('rsi')
             rsi_str = f"{rsi_val:.1f}" if rsi_val is not None else "N/A"
             
+            # SMA 포맷팅
+            sma_20 = technical.get('sma_20')
+            sma_20_str = f"{sma_20:,.0f}" if sma_20 is not None else "N/A"
+            sma_60 = technical.get('sma_60')
+            sma_60_str = f"{sma_60:,.0f}" if sma_60 is not None else "N/A"
+            
             prompt += f"""기술적 분석:
 - 현재가: {technical.get('current_price', 0):,.0f}
-- 등락률: {technical.get('change_pct', 0):+.2f}%
-- RSI: {rsi_str}
-- 변동성: {technical.get('volatility', 0):.2f}%
+- 전일 대비: {technical.get('change_pct', 0):+.2f}%
+- RSI(14): {rsi_str}
+- 20일 이동평균: {sma_20_str}
+- 60일 이동평균: {sma_60_str}
+- 변동성(일간): {technical.get('volatility', 0):.2f}%
 - 거래량: {technical.get('volume', 0):,.0f} (평균: {technical.get('avg_volume', 0):,.0f})
 
 """
+            
+            # 누적 수익률 추가
+            cum_ret = technical.get('cumulative_returns', {})
+            if cum_ret:
+                prompt += "누적 수익률:\n"
+                if '1w' in cum_ret:
+                    prompt += f"- 최근 1주: {cum_ret['1w']:+.2f}%\n"
+                if '1m' in cum_ret:
+                    prompt += f"- 최근 1개월: {cum_ret['1m']:+.2f}%\n"
+                if '3m' in cum_ret:
+                    prompt += f"- 최근 3개월: {cum_ret['3m']:+.2f}%\n"
+                prompt += "\n"
         
         # 감성 분석 데이터 (Phase 18)
+        # 주의: sentiment_score 범위는 -1(매우 부정) ~ +1(매우 긍정)
         if sentiment:
-            score = sentiment.get('sentiment_score', 0.5)
+            score = sentiment.get('sentiment_score', 0.0)
+            pos_ratio = sentiment.get('positive_ratio', 0.0)
+            neg_ratio = sentiment.get('negative_ratio', 0.0)
+            news_vol = sentiment.get('news_volume', 0)
+            trend = sentiment.get('sentiment_trend', 0.0)
+            
+            # 올바른 스케일 기준으로 판정 (-1 ~ +1)
+            if score > 0.2:
+                judgment = "긍정적 📈"
+            elif score < -0.2:
+                judgment = "부정적 📉"
+            else:
+                judgment = "중립 ➡️"
+            
             prompt += f"""뉴스 감성 분석:
-- 감성 점수: {score:.2f} (0=매우 부정적, 1=매우 긍정적)
-- 판정: {"긍정적 📈" if score > 0.6 else "부정적 📉" if score < 0.4 else "중립 ➡️"}
+- 감성 점수: {score:+.2f} (-1=매우 부정적, 0=중립, +1=매우 긍정적)
+- 판정: {judgment}
+- 긍정 뉴스 비율: {pos_ratio:.0%}
+- 부정 뉴스 비율: {neg_ratio:.0%}
+- 뉴스 수: {news_vol}건
+- 감성 추세: {"상승 ↑" if trend > 0.05 else "하락 ↓" if trend < -0.05 else "보합 →"}
 
 """
         

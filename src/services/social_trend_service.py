@@ -35,14 +35,10 @@ class GoogleTrendsAnalyzer:
         """pytrends 초기화"""
         try:
             from pytrends.request import TrendReq
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            # tz=-540 (UTC+9 Korea), verify=False to avoid SSL errors
-            # retries=3, backoff_factor=1 to handle 429 Too Many Requests
+            # tz=-540 (UTC+9 Korea)
             self.pytrends = TrendReq(
-                hl='ko-KR', 
-                tz=-540, 
-                requests_args={'verify': False}
+                hl='ko-KR',
+                tz=-540
             )
             self.available = True
         except ImportError:

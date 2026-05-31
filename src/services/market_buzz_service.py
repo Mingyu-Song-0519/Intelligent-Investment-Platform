@@ -274,7 +274,7 @@ class MarketBuzzService:
         for ticker in tickers:
             try:
                 df = self.collector.fetch_stock_data(ticker, period=f"{lookback_days + 1}d")
-                if df is None or len(df) < lookback_days:
+                if df is None or len(df) < max(2, lookback_days):
                     continue
                 
                 # 거래량 비율

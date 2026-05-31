@@ -2,6 +2,7 @@
 KIS Repository - Infrastructure Layer
 IKISRepository 인터페이스의 한국투자증권 구현체
 """
+import logging
 import requests
 import json
 from datetime import datetime, timedelta
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from src.domain.repositories.interfaces import IKISRepository
+
+logger = logging.getLogger(__name__)
 
 
 class KISRepository(IKISRepository):
@@ -64,7 +67,7 @@ class KISRepository(IKISRepository):
                         self.access_token = data['token']
                         self.token_expired = expired
         except Exception as e:
-            print(f"[WARNING] 토큰 로드 실패: {e}")
+            logger.warning(f"토큰 로드 실패: {e}")
     
     def _save_token(self):
         """토큰 파일 저장"""
@@ -76,7 +79,7 @@ class KISRepository(IKISRepository):
             with open(self.token_file, 'w') as f:
                 json.dump(data, f)
         except Exception as e:
-            print(f"[WARNING] 토큰 저장 실패: {e}")
+            logger.warning(f"토큰 저장 실패: {e}")
     
     def authenticate(self, app_key: str, app_secret: str) -> Optional[str]:
         """OAuth 토큰 발급"""
@@ -102,13 +105,13 @@ class KISRepository(IKISRepository):
             self.access_token = data['access_token']
             self.token_expired = datetime.now() + timedelta(hours=12)
             
-            print(f"[INFO] KIS Access Token 발급 성공")
+            logger.info("KIS Access Token 발급 성공")
             self._save_token()
             
             return self.access_token
             
         except Exception as e:
-            print(f"[ERROR] KIS Access Token 발급 실패: {e}")
+            logger.error(f"KIS Access Token 발급 실패: {e}")
             return None
     
     def get_realtime_price(self, ticker: str) -> Optional[Dict]:
@@ -138,7 +141,7 @@ class KISRepository(IKISRepository):
             data = res.json()
             
             if data['rt_cd'] != '0':
-                print(f"[ERROR] API 호출 오류: {data.get('msg1', '')}")
+                logger.error(f"API 호출 오류: {data.get('msg1', '')}")
                 return None
             
             output = data['output']
@@ -154,7 +157,7 @@ class KISRepository(IKISRepository):
             }
             
         except Exception as e:
-            print(f"[ERROR] 실시간 시세 조회 실패 ({ticker}): {e}")
+            logger.error(f"실시간 시세 조회 실패 ({ticker}): {e}")
             return None
     
     def get_orderbook(self, ticker: str) -> Optional[Dict]:
@@ -204,7 +207,7 @@ class KISRepository(IKISRepository):
             }
             
         except Exception as e:
-            print(f"[ERROR] 호가 조회 실패 ({ticker}): {e}")
+            logger.error(f"호가 조회 실패 ({ticker}): {e}")
             return None
     
     def create_order(
@@ -217,13 +220,13 @@ class KISRepository(IKISRepository):
     ) -> Optional[Dict]:
         """주문 생성"""
         # TODO: KIS 주문 API 구현
-        print(f"[WARNING] KIS 주문 기능은 아직 구현되지 않았습니다.")
+        logger.warning("KIS 주문 기능은 아직 구현되지 않았습니다.")
         return None
     
     def get_balance(self) -> Optional[Dict]:
         """계좌 잔고 조회"""
         # TODO: KIS 잔고 조회 API 구현
-        print(f"[WARNING] KIS 잔고 조회 기능은 아직 구현되지 않았습니다.")
+        logger.warning("KIS 잔고 조회 기능은 아직 구현되지 않았습니다.")
         return None
     
     def is_authenticated(self) -> bool:

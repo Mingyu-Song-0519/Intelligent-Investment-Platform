@@ -37,7 +37,7 @@ class VolatilityAnalyzer:
         # 캐시 유효성 확인
         if (self._vix_cache is not None and 
             self._cache_timestamp is not None and
-            (now - self._cache_timestamp).seconds < self._cache_ttl):
+            (now - self._cache_timestamp).total_seconds() < self._cache_ttl):
             return self._vix_cache
         
         try:

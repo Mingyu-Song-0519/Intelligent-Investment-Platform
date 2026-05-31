@@ -68,7 +68,7 @@ class OptionsAnalyzer:
             cache_key = f"{self.ticker}_{expiration}"
             if cache_key in self._options_cache:
                 cache_data = self._options_cache[cache_key]
-                if (datetime.now() - cache_data['timestamp']).seconds < self._cache_ttl:
+                if (datetime.now() - cache_data['timestamp']).total_seconds() < self._cache_ttl:
                     return cache_data['data']
             
             # 옵션 체인 조회
@@ -243,7 +243,7 @@ class OptionsAnalyzer:
         stock = self._get_stock()
         try:
             current_price = stock.info.get("regularMarketPrice") or stock.info.get("previousClose", 0)
-        except:
+        except Exception:
             current_price = 0
         
         # 행사가 목록

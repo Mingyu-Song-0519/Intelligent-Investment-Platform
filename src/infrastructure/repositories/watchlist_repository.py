@@ -169,7 +169,7 @@ class SQLiteWatchlistRepository(IWatchlistRepository):
         # 캐시 확인
         if user_id in self._cache:
             items, cached_at = self._cache[user_id]
-            if (datetime.now() - cached_at).seconds < self._cache_ttl:
+            if (datetime.now() - cached_at).total_seconds() < self._cache_ttl:
                 return items
         
         conn = self._get_connection()

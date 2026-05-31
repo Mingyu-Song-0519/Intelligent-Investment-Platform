@@ -46,8 +46,8 @@ class LLMClientFactory:
             try:
                 import streamlit as st
                 resolved_key = st.session_state.get('gemini_api_key')
-            except Exception:
-                pass
+            except Exception as e:
+                pass  # Session state API key not available
         
         # 2. 클라이언트 생성 시도
         if resolved_key:

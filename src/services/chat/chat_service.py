@@ -156,7 +156,7 @@ class ChatService:
         """Rate Limiting 체크"""
         now = datetime.now()
         # 1분 이내 호출 기록만 유지
-        self.call_history = [t for t in self.call_history if (now - t).seconds < 60]
+        self.call_history = [t for t in self.call_history if (now - t).total_seconds() < 60]
         
         if len(self.call_history) >= self.MAX_CALLS_PER_MINUTE:
             logger.warning(f"[ChatService] Rate limit exceeded: {len(self.call_history)} calls/min")

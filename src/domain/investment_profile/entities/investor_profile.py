@@ -45,6 +45,10 @@ class InvestorProfile:
         # 스타일 점수 기본값 설정
         if not self.style_scores:
             self.style_scores = {"value": 33.3, "growth": 33.3, "momentum": 33.4}
+        elif self.style_scores:
+            score_sum = sum(self.style_scores.values())
+            if abs(score_sum - 100.0) > 1.0:
+                raise ValueError(f"style_scores must sum to ~100.0, got {score_sum:.1f}")
     
     @property
     def profile_type(self) -> str:

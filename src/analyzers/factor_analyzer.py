@@ -180,13 +180,13 @@ class FactorAnalyzer:
         scores = []
         
         # ROE 점수 (높을수록 좋음)
-        if roe:
+        if roe is not None and roe != 0:
             # ROE 0~30% → 0~100점
             roe_score = min(100, max(0, roe * 100 / 0.3))
             scores.append(roe_score)
         
         # 이익 마진 점수
-        if profit_margin:
+        if profit_margin is not None and profit_margin != 0:
             # Profit Margin 0~20% → 0~100점
             margin_score = min(100, max(0, profit_margin * 100 / 0.2))
             scores.append(margin_score)

@@ -2,6 +2,7 @@
 YAML 기반 설문 질문 저장소 구현
 """
 import yaml
+import threading
 from pathlib import Path
 from typing import List, Optional
 
@@ -12,54 +13,56 @@ from src.domain.investment_profile.entities.assessment import Question, Question
 # 모듈 수준 캐시 (싱글톤 패턴)
 _QUESTIONS_CACHE: List[Question] = []
 _QUESTIONS_LOADED: bool = False
+_QUESTIONS_LOCK = threading.Lock()
 
 
 def _load_questions_once(yaml_path: Path) -> List[Question]:
     """질문을 한 번만 로드 (모듈 수준 캐싱)"""
     global _QUESTIONS_CACHE, _QUESTIONS_LOADED
-    
-    if _QUESTIONS_LOADED:
-        return _QUESTIONS_CACHE
-    
-    if not yaml_path.exists():
-        _QUESTIONS_LOADED = True
-        return []
-    
-    try:
-        with open(yaml_path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-        
-        if not data or 'questions' not in data:
+
+    with _QUESTIONS_LOCK:
+        if _QUESTIONS_LOADED:
+            return _QUESTIONS_CACHE
+
+        if not yaml_path.exists():
             _QUESTIONS_LOADED = True
             return []
-        
-        for q_data in data['questions']:
-            options = [
-                QuestionOption(
-                    label=opt['label'],
-                    score=opt.get('score', 0.0),
-                    value=opt.get('value')
+
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f)
+
+            if not data or 'questions' not in data:
+                _QUESTIONS_LOADED = True
+                return []
+
+            for q_data in data['questions']:
+                options = [
+                    QuestionOption(
+                        label=opt['label'],
+                        score=opt.get('score', 0.0),
+                        value=opt.get('value')
+                    )
+                    for opt in q_data.get('options', [])
+                ]
+
+                question = Question(
+                    question_id=q_data['id'],
+                    category=q_data['category'],
+                    question_text=q_data['text'],
+                    question_type=QuestionType(q_data['type']),
+                    options=options,
+                    weight=q_data.get('weight', 1.0)
                 )
-                for opt in q_data.get('options', [])
-            ]
-            
-            question = Question(
-                question_id=q_data['id'],
-                category=q_data['category'],
-                question_text=q_data['text'],
-                question_type=QuestionType(q_data['type']),
-                options=options,
-                weight=q_data.get('weight', 1.0)
-            )
-            _QUESTIONS_CACHE.append(question)
-        
-        _QUESTIONS_LOADED = True
-        
-    except Exception as e:
-        print(f"[ERROR] 설문 로드 실패: {e}")
-        _QUESTIONS_LOADED = True
-    
-    return _QUESTIONS_CACHE
+                _QUESTIONS_CACHE.append(question)
+
+            _QUESTIONS_LOADED = True
+
+        except Exception as e:
+            print(f"[ERROR] 설문 로드 실패: {e}")
+            _QUESTIONS_LOADED = True
+
+        return _QUESTIONS_CACHE
 
 
 class YAMLQuestionRepository(IQuestionRepository):

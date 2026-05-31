@@ -64,5 +64,5 @@ class BuzzScore:
         return self.final_score < 40
     
     def __lt__(self, other: 'BuzzScore') -> bool:
-        """정렬용: final_score 기준 내림차순"""
-        return self.final_score > other.final_score
+        """정렬용: final_score 기준 오름차순"""
+        return self.final_score < other.final_score
