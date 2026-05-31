@@ -201,10 +201,17 @@ class NewsCollector:
                 match = re.search(r"top\.location\.href='([^']+)'", str(soup))
                 if match:
                     redirect_url = match.group(1)
-                    # 리디렉션 URL로 재요청
-                    response = self.session.get(redirect_url, timeout=10)
-                    response.raise_for_status()
-                    soup = BeautifulSoup(response.content, 'html.parser')
+                    # M1: SSRF 방지 — 네이버 도메인만 허용
+                    from urllib.parse import urlparse as _urlparse
+                    _ALLOWED = frozenset({
+                        'finance.naver.com', 'news.naver.com',
+                        'n.news.naver.com', 'm.stock.naver.com',
+                    })
+                    _parsed = _urlparse(redirect_url)
+                    if _parsed.scheme in ('http', 'https') and _parsed.hostname in _ALLOWED:
+                        response = self.session.get(redirect_url, timeout=10)
+                        response.raise_for_status()
+                        soup = BeautifulSoup(response.content, 'html.parser')
 
             # 날짜 추출 (여러 패턴 시도)
             date_str = None

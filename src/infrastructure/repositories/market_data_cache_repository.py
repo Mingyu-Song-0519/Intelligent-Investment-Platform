@@ -4,12 +4,14 @@ Clean Architecture: Infrastructure Layer
 
 SQLite 기반 시장 데이터 캐시
 """
+import io
 import logging
 import sqlite3
-import pickle
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
+
+import pandas as pd
 
 from src.domain.market_data.interfaces import OHLCV, IMarketDataCache
 
@@ -69,9 +71,8 @@ class SQLiteMarketDataCache(IMarketDataCache):
                     self.invalidate(ticker)
                     return None
                 
-                # Unpickle
-                import pandas as pd
-                df = pickle.loads(data_blob)
+                # Parquet 역직렬화 (H1: pickle RCE 방지)
+                df = pd.read_parquet(io.BytesIO(bytes(data_blob)))
                 
                 return OHLCV(
                     ticker=ticker,
@@ -95,8 +96,10 @@ class SQLiteMarketDataCache(IMarketDataCache):
             start = df.index.min().strftime('%Y-%m-%d')
             end = df.index.max().strftime('%Y-%m-%d')
             
-            # Pickle
-            data_blob = pickle.dumps(df)
+            # Parquet 직렬화 (H1: pickle RCE 방지)
+            buf = io.BytesIO()
+            df.to_parquet(buf, index=True)
+            data_blob = buf.getvalue()
             
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()

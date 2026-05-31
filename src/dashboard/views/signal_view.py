@@ -93,7 +93,7 @@ def render_signal_card(ticker: str, stock_name: str, user_id: str = "default_use
     # 저장된 신호 표시
     signal_key = f"signal_{ticker}"
     if signal_key in st.session_state:
-        signal = st.session_state[signal_key]
+        signal = st.session_state.get(signal_key, None)
         _display_signal(signal)
         
         # 닫기 버튼
@@ -124,6 +124,7 @@ def _display_signal(signal):
             'STRONG_SELL': "#F44336"
         }.get(signal.signal_type.name, "#9E9E9E")
         
+        import html as _html
         signal_html = f"""
         <div style="
             background-color: {signal_color}20;
@@ -132,10 +133,10 @@ def _display_signal(signal):
             border-radius: 5px;
         ">
             <span style="font-size: 20px; font-weight: bold; color: {signal_color};">
-                {signal.signal_type.value}
+                {_html.escape(str(signal.signal_type.value))}
             </span>
             <span style="color: gray; margin-left: 10px;">
-                (신호 강도: {signal.signal_strength})
+                (신호 강도: {_html.escape(str(signal.signal_strength))})
             </span>
         </div>
         """

@@ -147,8 +147,12 @@ check_*.py
 fix_*.py
 *_baseline.txt
 *_output.txt
+*_out_new.txt
 error.txt
+server_log.txt
 nul
+naver_detail_dump.html
+scripts/scratch/
 
 # ========================================
 # Node.js 및 E2E 테스트
@@ -169,3 +173,104 @@ pytest.ini
 # ========================================
 *설정*.txt
 KIS*API*.txt
+# Logs & Temporary Files
+# IDE & Editors
+*.secret.*
+.aws/config
+.claude/local/
+secret-*.*
+# Claude Code Configuration
+.netlify/
+.uv-cache/
+*_key.*
+*_secret.*
+.turbo/
+!.env.example
+*.egg
+.claude/skills/*/*/*token*
+.TemporaryItems
+.#*
+# Windows
+# Private keys (specific patterns to avoid false positives)
+*.sln
+.LSOverride
+# ============================================
+# Virtual Environments
+*.suo
+.VolumeIcon.icns
+*.sublime-project
+out/
+ehthumbs.db
+.claude/skills/*/.env*
+.aws/credentials
+# Certificate files
+dist-ssr/
+# Secrets and Credentials (CRITICAL)
+*-secret-key.*
+.claude/plans/
+*.p12
+*.backup/
+*_secret=*
+.uv_cache/
+.claude/settings.local.*.json
+*_backup_*/
+*.dbm
+*-backup/
+*-key.*
+# OS Files
+.tscache/
+logs/
+private-key*
+.Spotlight-V100
+# Python Cache & Bytecode
+.next/
+# Version: 0.33.0
+# Purpose: Essential patterns for user projects
+# Environment files
+.claude/skills/*/*/*secret*
+.moai-backups/
+.nuxt/
+.firebase/
+# Credential patterns in environment files
+*-secret.*
+# ===========================================
+*.jks
+# Build Tools & Frameworks
+# Cloud provider credentials
+.vercel/
+.cursor/
+api-key-*
+.directory
+# Test Coverage
+*.pfx
+*.key.*
+# Mac
+.claude/skills/*/*/*key*
+# FIXED: Issue #237 - Replaced overly broad *key* and *secret* patterns
+.claude/settings.local.json
+*.sw?
+.DocumentRevisions-V100
+*.sublime-workspace
+# MoAI-ADK Package Distribution .gitignore
+coverage.json
+.claude/skills/*/secrets/
+# Updated: 2026-01-10
+.fseventsd
+*_token=*
+.Trashes
+*-api-key.*
+# Node.js (for docs/Nextra)
+# Skill-specific credentials
+.env/
+.AppleDouble
+# Linux
+.claude/.env.local*
+# Build Artifacts & Distribution
+*.rdb
+*.tsbuildinfo
+*.njsproj
+*.backup
+secret-key-*
+# Deployment & CI/CD
+[Dd]esktop.ini
+# Backups

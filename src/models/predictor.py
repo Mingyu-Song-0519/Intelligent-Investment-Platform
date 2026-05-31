@@ -729,12 +729,22 @@ class XGBoostClassifier:
 
     def load(self, name: str = 'xgboost_model'):
         """모델 로드"""
+        import re
         path_obj = Path(name)
+        models_dir_resolved = MODELS_DIR.resolve()
+
         if path_obj.is_absolute() or path_obj.parent.exists():
+            # H2: 절대 경로 / 상대 경로 탈출 방어 — MODELS_DIR 하위인지 검증
+            resolved = path_obj.resolve()
+            if not resolved.is_relative_to(models_dir_resolved):
+                raise ValueError(f"모델 경로가 허용 디렉터리({models_dir_resolved}) 밖입니다: {resolved}")
             model_path = path_obj.with_suffix('.pkl')
             scaler_path = path_obj.parent / f"{path_obj.stem}_scaler.pkl"
             feature_path = path_obj.parent / f"{path_obj.stem}_features.pkl"
         else:
+            # H2: 이름에 경로 구분자 · .. 포함 불허 (티커 형식만 허용)
+            if not re.match(r'^[0-9A-Za-z._-]{1,64}$', name):
+                raise ValueError(f"허용되지 않는 모델 이름: {name!r}")
             model_path = MODELS_DIR / f"{name}.pkl"
             scaler_path = MODELS_DIR / f"{name}_scaler.pkl"
             feature_path = MODELS_DIR / f"{name}_features.pkl"

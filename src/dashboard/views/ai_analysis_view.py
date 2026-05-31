@@ -23,7 +23,9 @@ def _get_report_service():
     
     # Gemini 클라이언트
     try:
-        llm_client = GeminiClient()
+        import streamlit as st
+        user_api_key = st.session_state.get('gemini_api_key', None)
+        llm_client = GeminiClient(api_key=user_api_key)
         if not llm_client.is_available():
             logger.warning("GeminiClient not available, using mock")
             from src.infrastructure.external.gemini_client import MockLLMClient
@@ -96,7 +98,7 @@ def render_ai_analysis_button(ticker: str, stock_name: str, user_id: str = "defa
     # 저장된 리포트 표시
     report_key = f"ai_report_{ticker}"
     if report_key in st.session_state:
-        report = st.session_state[report_key]
+        report = st.session_state.get(report_key, None)
         _display_report(report)
         
         # 닫기 버튼
@@ -116,6 +118,7 @@ def _display_report(report):
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
+        import html as _html
         signal_html = f"""
         <div style="
             background-color: {report.signal_color}20;
@@ -123,9 +126,9 @@ def _display_report(report):
             padding: 10px 15px;
             border-radius: 5px;
         ">
-            <span style="font-size: 24px;">{report.signal_emoji}</span>
+            <span style="font-size: 24px;">{_html.escape(str(report.signal_emoji))}</span>
             <span style="font-size: 20px; font-weight: bold; color: {report.signal_color};">
-                {report.signal.value}
+                {_html.escape(str(report.signal.value))}
             </span>
         </div>
         """
@@ -190,7 +193,7 @@ def render_ai_analysis_tab(ticker: str, stock_name: str, user_id: str = "default
     # 저장된 리포트 표시
     report_key = f"ai_report_{ticker}"
     if report_key in st.session_state:
-        report = st.session_state[report_key]
+        report = st.session_state.get(report_key, None)
         _display_report(report)
     else:
         st.info("🔍 'AI 분석 시작' 버튼을 클릭하여 AI의 투자 분석을 받아보세요.")
