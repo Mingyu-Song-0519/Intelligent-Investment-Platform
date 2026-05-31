@@ -4,10 +4,13 @@ Regime-Aware Predictor - Phase 14
 
 기존 EnsemblePredictor를 래핑하여 시장 상황에 따라 모델 가중치를 동적으로 조절
 """
+import logging
 from typing import Dict, Optional, List
 import pandas as pd
 import numpy as np
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from src.analyzers.regime_classifier import RegimeClassifier, RegimeAwareModelSelector, MarketRegime
 
@@ -131,7 +134,7 @@ class RegimeAwarePredictor:
             }
             
         except Exception as e:
-            print(f"[ERROR] Ensemble 예측 실패: {e}")
+            logger.error(f"Ensemble 예측 실패: {e}")
             import traceback
             traceback.print_exc()
             # 폴백

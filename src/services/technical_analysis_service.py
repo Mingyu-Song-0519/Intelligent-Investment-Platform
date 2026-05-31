@@ -7,7 +7,10 @@ Clean Architecture:
 - TechnicalAnalyzer로 지표 계산
 - 결과를 Entity로 반환
 """
+import logging
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 import pandas as pd
 
 from src.domain.repositories.interfaces import IStockRepository
@@ -86,7 +89,7 @@ class TechnicalAnalysisService:
             }
             
         except Exception as e:
-            print(f"[ERROR] TechnicalAnalysisService.analyze: {e}")
+            logger.error(f"TechnicalAnalysisService.analyze: {e}")
             return None
     
     def get_signal(self, ticker: str, period: str = "1mo") -> Optional[SignalEntity]:
@@ -141,5 +144,5 @@ class TechnicalAnalysisService:
             )
             
         except Exception as e:
-            print(f"[ERROR] TechnicalAnalysisService.get_signal: {e}")
+            logger.error(f"TechnicalAnalysisService.get_signal: {e}")
             return None

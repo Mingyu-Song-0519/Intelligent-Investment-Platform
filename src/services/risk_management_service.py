@@ -2,8 +2,11 @@
 Risk Management Service - Application Layer
 리스크 관리를 위한 Application Service
 """
+import logging
 from typing import Dict, List, Optional
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.interfaces import IStockRepository, IPortfolioRepository
 from src.domain.entities.stock import PortfolioEntity
@@ -94,7 +97,7 @@ class RiskManagementService:
             }
             
         except Exception as e:
-            print(f"[ERROR] RiskManagementService.calculate_portfolio_risk: {e}")
+            logger.error(f"RiskManagementService.calculate_portfolio_risk: {e}")
             return None
     
     def check_risk_limits(

@@ -3,8 +3,11 @@ Legacy Adapter - Strangler Fig Pattern
 기존 collectors/, analyzers/ 모듈을 새 인터페이스로 래핑
 점진적 마이그레이션을 위한 어댑터
 """
+import logging
 from typing import List, Optional, Dict
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.interfaces import IStockRepository, INewsRepository
 from src.domain.entities.stock import StockEntity, SignalEntity
@@ -49,7 +52,7 @@ class LegacyCollectorAdapter(IStockRepository):
             )
             
         except Exception as e:
-            print(f"[ERROR] LegacyCollectorAdapter.get_stock_data: {e}")
+            logger.error(f"LegacyCollectorAdapter.get_stock_data: {e}")
             return None
     
     def get_multiple_stocks(
@@ -83,7 +86,7 @@ class LegacyCollectorAdapter(IStockRepository):
                 "market_cap": info.get("marketCap")
             }
         except Exception as e:
-            print(f"[ERROR] LegacyCollectorAdapter.get_stock_info: {e}")
+            logger.error(f"LegacyCollectorAdapter.get_stock_info: {e}")
             return None
     
     def save_stock_data(self, stock: StockEntity) -> bool:
@@ -105,7 +108,7 @@ class LegacyCollectorAdapter(IStockRepository):
             return saved_count > 0
             
         except Exception as e:
-            print(f"[ERROR] LegacyCollectorAdapter.save_stock_data: {e}")
+            logger.error(f"LegacyCollectorAdapter.save_stock_data: {e}")
             return False
     
     def load_stock_data(
@@ -143,7 +146,7 @@ class LegacyCollectorAdapter(IStockRepository):
             )
             
         except Exception as e:
-            print(f"[ERROR] LegacyCollectorAdapter.load_stock_data: {e}")
+            logger.error(f"LegacyCollectorAdapter.load_stock_data: {e}")
             return None
 
 
@@ -180,7 +183,7 @@ class LegacyNewsAdapter(INewsRepository):
             return articles[:max_results]
             
         except Exception as e:
-            print(f"[ERROR] LegacyNewsAdapter.get_news: {e}")
+            logger.error(f"LegacyNewsAdapter.get_news: {e}")
             return []
     
     def get_stock_news(
@@ -232,7 +235,7 @@ class LegacyAnalyzerAdapter:
             }
             
         except Exception as e:
-            print(f"[ERROR] LegacyAnalyzerAdapter.analyze: {e}")
+            logger.error(f"LegacyAnalyzerAdapter.analyze: {e}")
             return {}
     
     def get_signal(self, stock: StockEntity) -> SignalEntity:

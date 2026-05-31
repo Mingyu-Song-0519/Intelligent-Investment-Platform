@@ -6,8 +6,11 @@
 
 하위 호환성을 위해 유지되며, 내부적으로 새 Service Layer를 호출합니다.
 """
+import logging
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from typing import Dict, List, Optional, Tuple
 import warnings
 
@@ -131,14 +134,14 @@ def create_enhanced_features(
     # 감성 피처 추가
     if include_sentiment:
         llm_msg = " (🧠 Gemini LLM)" if use_llm else ""
-        print(f"[INFO] 감성 분석 피처 수집 중... ({stock_name or ticker}){llm_msg}")
+        logger.info(f"감성 분석 피처 수집 중... ({stock_name or ticker}){llm_msg}")
         integrator = SentimentFeatureIntegrator(ticker, stock_name, market, use_llm=use_llm)
         sentiment_features = integrator.get_sentiment_features()
         
         df = integrator.add_sentiment_to_dataframe(df, sentiment_features)
         available_features.extend(SentimentFeatureIntegrator.get_sentiment_feature_columns())
         
-        print(f"[SUCCESS] 감성 피처 추가 완료 - 점수: {sentiment_features['sentiment_score']:.3f}")
+        logger.info(f"감성 피처 추가 완료 - 점수: {sentiment_features['sentiment_score']:.3f}")
     
     return df, available_features
 

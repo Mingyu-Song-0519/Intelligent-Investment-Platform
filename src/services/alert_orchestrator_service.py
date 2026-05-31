@@ -2,8 +2,11 @@
 Alert Orchestrator Service - Application Layer
 알림 발송 오케스트레이션 (Phase 9-5 NotificationManager 연동)
 """
+import logging
 from typing import List, Dict, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from src.domain.entities.stock import StockEntity, SignalEntity
 from src.domain.repositories.interfaces import IStockRepository
@@ -57,7 +60,7 @@ class AlertOrchestratorService:
                     return alert.to_dict()
                     
         except Exception as e:
-            print(f"[ERROR] AlertOrchestratorService.check_and_alert_vix: {e}")
+            logger.error(f"AlertOrchestratorService.check_and_alert_vix: {e}")
         
         return None
     
@@ -93,7 +96,7 @@ class AlertOrchestratorService:
                     return alert.to_dict()
                     
         except Exception as e:
-            print(f"[ERROR] AlertOrchestratorService.check_and_alert_portfolio_mdd: {e}")
+            logger.error(f"AlertOrchestratorService.check_and_alert_portfolio_mdd: {e}")
         
         return None
     
@@ -140,7 +143,7 @@ class AlertOrchestratorService:
                 return True
                 
         except Exception as e:
-            print(f"[ERROR] AlertOrchestratorService.check_and_alert_trading_signal: {e}")
+            logger.error(f"AlertOrchestratorService.check_and_alert_trading_signal: {e}")
         
         return False
     

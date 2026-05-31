@@ -7,7 +7,10 @@ Social Trend Analyzer - Phase 12
 - RSS 피드 (뉴스 사이트)
 - Pushshift (Reddit 아카이브 - 선택적)
 """
+import logging
 from typing import List, Dict, Optional
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 import pandas as pd
 from dataclasses import dataclass
@@ -42,7 +45,7 @@ class GoogleTrendsAnalyzer:
             )
             self.available = True
         except ImportError:
-            print("[WARNING] pytrends 설치 필요: pip install pytrends")
+            logger.warning("pytrends 설치 필요: pip install pytrends")
             self.available = False
     
     def get_trend(
@@ -101,7 +104,7 @@ class GoogleTrendsAnalyzer:
             )
             
         except Exception as e:
-            print(f"[ERROR] GoogleTrendsAnalyzer.get_trend: {e}")
+            logger.error(f"GoogleTrendsAnalyzer.get_trend: {e}")
             return None
     
     def get_interest_over_time(
@@ -129,7 +132,7 @@ class GoogleTrendsAnalyzer:
             return df
             
         except Exception as e:
-            print(f"[ERROR] GoogleTrendsAnalyzer.get_interest_over_time: {e}")
+            logger.error(f"GoogleTrendsAnalyzer.get_interest_over_time: {e}")
             return pd.DataFrame()
     
     def compare_trends(
@@ -163,7 +166,7 @@ class GoogleTrendsAnalyzer:
             return df
             
         except Exception as e:
-            print(f"[ERROR] GoogleTrendsAnalyzer.compare_trends: {e}")
+            logger.error(f"GoogleTrendsAnalyzer.compare_trends: {e}")
             return pd.DataFrame()
     
     def get_related_queries(self, keyword: str) -> Dict:
@@ -186,7 +189,7 @@ class GoogleTrendsAnalyzer:
             return related.get(keyword, {"top": pd.DataFrame(), "rising": pd.DataFrame()})
             
         except Exception as e:
-            print(f"[ERROR] GoogleTrendsAnalyzer.get_related_queries: {e}")
+            logger.error(f"GoogleTrendsAnalyzer.get_related_queries: {e}")
             return {"top": pd.DataFrame(), "rising": pd.DataFrame()}
 
 

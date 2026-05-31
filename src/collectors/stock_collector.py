@@ -1,11 +1,14 @@
 """
 데이터 수집 모듈 - Yahoo Finance API를 통한 주식 데이터 수집
 """
+import logging
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 from config import DATABASE_PATH, DEFAULT_PERIOD, DEFAULT_INTERVAL, DATA_DIR
 
@@ -93,7 +96,7 @@ class StockDataCollector:
                 df = stock.history(period=period, interval=interval)
             
             if df.empty:
-                print(f"[WARNING] {ticker}: 데이터를 가져올 수 없습니다.")
+                logger.warning(f"{ticker}: 데이터를 가져올 수 없습니다.")
                 return pd.DataFrame()
             
             # 컬럼명 정규화
@@ -113,11 +116,11 @@ class StockDataCollector:
             
             df['ticker'] = ticker
             
-            print(f"[INFO] {ticker}: {len(df)}개 데이터 수집 완료")
+            logger.info(f"{ticker}: {len(df)}개 데이터 수집 완료")
             return df
             
         except Exception as e:
-            print(f"[ERROR] {ticker}: 데이터 수집 실패 - {str(e)}")
+            logger.error(f"{ticker}: 데이터 수집 실패 - {str(e)}")
             return pd.DataFrame()
     
     def save_to_database(self, df: pd.DataFrame, ticker: str) -> int:
@@ -154,11 +157,11 @@ class StockDataCollector:
                     ))
                     saved_count += 1
                 except Exception as e:
-                    print(f"[ERROR] 데이터 저장 실패: {e}")
+                    logger.error(f"데이터 저장 실패: {e}")
             
             conn.commit()
         
-        print(f"[INFO] {ticker}: {saved_count}개 데이터 DB 저장 완료")
+        logger.info(f"{ticker}: {saved_count}개 데이터 DB 저장 완료")
         return saved_count
     
     def fetch_and_save(
@@ -234,7 +237,7 @@ class StockDataCollector:
                 'market_cap': info.get('marketCap', 0),
             }
         except Exception as e:
-            print(f"[ERROR] 종목 정보 조회 실패: {e}")
+            logger.error(f"종목 정보 조회 실패: {e}")
             return {}
 
 

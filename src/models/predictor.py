@@ -1,11 +1,14 @@
 """
 AI 예측 모델 모듈 - LSTM 및 XGBoost 기반 주가 예측
 """
+import logging
 import numpy as np
 import pandas as pd
 from typing import Tuple, Optional, Dict, Any
 from pathlib import Path
 import pickle
+
+logger = logging.getLogger(__name__)
 
 from config import MODEL_CONFIG, MODELS_DIR
 
@@ -34,14 +37,14 @@ except ImportError:
         TENSORFLOW_AVAILABLE = True
     except ImportError:
         TENSORFLOW_AVAILABLE = False
-        print("[WARNING] Keras/TensorFlow not installed. LSTM model will not be available.")
+        logger.warning("Keras/TensorFlow not installed. LSTM model will not be available.")
 
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
 except ImportError:
     XGBOOST_AVAILABLE = False
-    print("[WARNING] XGBoost not installed. XGBoost model will not be available.")
+    logger.warning("XGBoost not installed. XGBoost model will not be available.")
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
@@ -230,7 +233,7 @@ class LSTMPredictor:
         if incremental and self.model is not None:
             # 점진적 학습 모드: Fine-tuning
             if verbose:
-                print("[INFO] Incremental Learning Mode: Fine-tuning existing model")
+                logger.info("Incremental Learning Mode: Fine-tuning existing model")
             
             # 신규 데이터 준비
             X_new, _, y_new, _ = self.preprocessor.prepare_lstm_data(
@@ -292,7 +295,7 @@ class LSTMPredictor:
         else:
             # 전체 학습 모드 (기존 로직)
             if verbose and incremental:
-                print("[WARNING] No existing model found. Performing full training.")
+                logger.warning("No existing model found. Performing full training.")
             
             # 데이터 준비
             X_train, X_test, y_train, y_test = self.preprocessor.prepare_lstm_data(
@@ -353,7 +356,7 @@ class LSTMPredictor:
             # 차원 불일치 에러 감지 (ValueError 또는 "Dimensions must be equal")
             msg = str(e).lower()
             if "dimensions" in msg or "shape" in msg or "mismatch" in msg or "minmaxscaler" in msg or ("features" in msg and "expecting" in msg):
-                print(f"[WARNING] 예측 중 차원 불일치 발생. 자동 보정 시도: {e}")
+                logger.warning(f"예측 중 차원 불일치 발생. 자동 보정 시도: {e}")
                 
                 # Feature 개수 줄여서 재시도 (맨 뒤에서부터 하나씩 제거)
                 # 모델이 4개를 원하는데 5개가 들어온 경우 등을 대비
@@ -362,17 +365,17 @@ class LSTMPredictor:
                     if hasattr(self.model, 'input_shape'):
                         target_dim = self.model.input_shape[-1]
                         if len(current_cols) > target_dim:
-                            print(f"[INFO] Feature {len(current_cols)} -> {target_dim}개로 조정하여 재시도")
+                            logger.info(f"Feature {len(current_cols)} -> {target_dim}개로 조정하여 재시도")
                             new_cols = current_cols[:target_dim]
                             return self._predict_internal(df, new_cols)
                     
                     # input_shape를 모르는 경우: 하나 줄여서 시도 (임시)
                     if len(current_cols) > 4:
-                        print(f"[INFO] Feature 하나 줄여서 재시도 ({len(current_cols)-1})")
+                        logger.info(f"Feature 하나 줄여서 재시도 ({len(current_cols)-1})")
                         return self._predict_internal(df, current_cols[:-1])
                         
                 except Exception as retry_e:
-                    print(f"[ERROR] 재시도 실패: {retry_e}")
+                    logger.error(f"재시도 실패: {retry_e}")
                     raise e  # 원래 에러 발생
             
             raise e
@@ -429,10 +432,10 @@ class LSTMPredictor:
         is_absolute_path = path_obj.is_absolute() or (len(name_str) > 2 and name_str[1] == ':')
         
         # DEBUG
-        print(f"[DEBUG] LSTM save - name: {name}")
-        print(f"[DEBUG] LSTM save - name_str[1]: {name_str[1] if len(name_str) > 1 else 'N/A'}")
-        print(f"[DEBUG] LSTM save - is_absolute_path: {is_absolute_path}")
-        print(f"[DEBUG] LSTM save - path_obj.is_absolute(): {path_obj.is_absolute()}")
+        logger.debug(f"LSTM save - name: {name}")
+        logger.debug(f"LSTM save - name_str[1]: {name_str[1] if len(name_str) > 1 else 'N/A'}")
+        logger.debug(f"LSTM save - is_absolute_path: {is_absolute_path}")
+        logger.debug(f"LSTM save - path_obj.is_absolute(): {path_obj.is_absolute()}")
         
         if is_absolute_path:
             # 절대 경로: 그대로 사용
@@ -447,7 +450,7 @@ class LSTMPredictor:
             feature_path = MODELS_DIR / f"{name}_features.pkl"
             MODELS_DIR.mkdir(parents=True, exist_ok=True)
         
-        print(f"[DEBUG] LSTM save - model_path: {model_path}")
+        logger.debug(f"LSTM save - model_path: {model_path}")
         
         self.model.save(model_path)
         with open(scaler_path, 'wb') as f:
@@ -462,9 +465,9 @@ class LSTMPredictor:
             metadata_path = model_path.parent / f"{model_path.stem}_metadata.json"
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
-            print(f"[INFO] 메타데이터 저장 완료: {metadata_path}")
+            logger.info(f"메타데이터 저장 완료: {metadata_path}")
         
-        print(f"[INFO] 모델 저장 완료: {model_path}")
+        logger.info(f"모델 저장 완료: {model_path}")
     
     def load(self, name: str = 'lstm_model'):
         """모델 로드"""
@@ -524,26 +527,26 @@ class LSTMPredictor:
                         kernel = weights[0] # 첫 번째 레이어의 커널이라 가정
                         if hasattr(kernel, 'shape') and len(kernel.shape) == 2:
                             n_features_model = kernel.shape[0]
-                            print(f"[INFO] 가중치 기반 Feature 감지: {n_features_model}")
+                            logger.info(f"가중치 기반 Feature 감지: {n_features_model}")
                 except Exception as w_e:
-                    print(f"[WARNING] 가중치 확인 실패: {w_e}")
+                    logger.warning(f"가중치 확인 실패: {w_e}")
 
             if n_features_model is not None:
                 n_features_cols = len(self.preprocessor.feature_columns)
                 
                 if n_features_model != n_features_cols:
-                    print(f"[WARNING] Feature 불일치! 모델 요구: {n_features_model}, 현재 설정: {n_features_cols}")
+                    logger.warning(f"Feature 불일치! 모델 요구: {n_features_model}, 현재 설정: {n_features_cols}")
                     
                     # 1. 모델이 더 적은 경우 -> 앞에서부터 잘라내기
                     if n_features_model < n_features_cols:
                         self.preprocessor.feature_columns = self.preprocessor.feature_columns[:n_features_model]
-                        print(f"[INFO] Feature 자동 축소 적용: {self.preprocessor.feature_columns}")
+                        logger.info(f"Feature 자동 축소 적용: {self.preprocessor.feature_columns}")
                         
                         # [중요] Scaler도 함께 축소해야 함
                         try:
                             scaler = self.preprocessor.scaler
                             if hasattr(scaler, 'n_features_in_') and scaler.n_features_in_ > n_features_model:
-                                print(f"[INFO] Scaler 차원 축소: {scaler.n_features_in_} -> {n_features_model}")
+                                logger.info(f"Scaler 차원 축소: {scaler.n_features_in_} -> {n_features_model}")
                                 scaler.n_features_in_ = n_features_model
                                 if hasattr(scaler, 'min_'): scaler.min_ = scaler.min_[:n_features_model]
                                 if hasattr(scaler, 'scale_'): scaler.scale_ = scaler.scale_[:n_features_model]
@@ -551,11 +554,11 @@ class LSTMPredictor:
                                 if hasattr(scaler, 'data_max_'): scaler.data_max_ = scaler.data_max_[:n_features_model]
                                 if hasattr(scaler, 'data_range_'): scaler.data_range_ = scaler.data_range_[:n_features_model]
                         except Exception as scale_e:
-                            print(f"[WARNING] Scaler 조정 실패: {scale_e}")
+                            logger.warning(f"Scaler 조정 실패: {scale_e}")
                     
                     # 2. 모델이 더 많은 경우 -> 기본값에서 부족한 만큼 채우기
                     else:
-                        print(f"[WARNING] 모델이 더 많은 Feature를 요구합니다.")
+                        logger.warning("모델이 더 많은 Feature를 요구합니다.")
                         default_pool = ['close', 'volume', 'rsi', 'macd', 'ma5', 'ma20', 'ma60', 'ma120', 'bb_upper', 'bb_lower']
                         current = list(self.preprocessor.feature_columns)
                         for col in default_pool:
@@ -564,14 +567,14 @@ class LSTMPredictor:
                             if col not in current:
                                 current.append(col)
                         self.preprocessor.feature_columns = current
-                        print(f"[INFO] Feature 자동 확장 적용: {self.preprocessor.feature_columns}")
+                        logger.info(f"Feature 자동 확장 적용: {self.preprocessor.feature_columns}")
             else:
-                print("[WARNING] 모델의 Input Shape를 감지할 수 없습니다.")
+                logger.warning("모델의 Input Shape를 감지할 수 없습니다.")
                         
         except Exception as e:
-            print(f"[WARNING] Feature 자동 조정 중 오류: {e}")
+            logger.warning(f"Feature 자동 조정 중 오류: {e}")
         
-        print(f"[INFO] 모델 로드 완료: {model_path}")
+        logger.info(f"모델 로드 완료: {model_path}")
     
 
 
@@ -614,7 +617,7 @@ class XGBoostClassifier:
         """
         if incremental and hasattr(self, 'model') and self.model is not None:
             # 점진적 학습 모드
-            print("[INFO] XGBoost Incremental Learning Mode")
+            logger.info("XGBoost Incremental Learning Mode")
             
             # 신규 데이터 준비
             X_new, _, y_new, _ = self.preprocessor.prepare_classification_data(df, feature_cols)
@@ -725,7 +728,7 @@ class XGBoostClassifier:
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
         
-        print(f"[INFO] 모델 저장 완료: {model_path}")
+        logger.info(f"모델 저장 완료: {model_path}")
 
     def load(self, name: str = 'xgboost_model'):
         """모델 로드"""
@@ -758,7 +761,7 @@ class XGBoostClassifier:
             with open(feature_path, 'rb') as f:
                 self.preprocessor.feature_columns = pickle.load(f)
         
-        print(f"[INFO] 모델 로드 완료: {model_path}")
+        logger.info(f"모델 로드 완료: {model_path}")
 
 
 # 사용 예시

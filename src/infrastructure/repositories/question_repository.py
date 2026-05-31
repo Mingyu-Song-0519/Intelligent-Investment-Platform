@@ -1,10 +1,13 @@
 """
 YAML 기반 설문 질문 저장소 구현
 """
+import logging
 import yaml
 import threading
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.profile_interfaces import IQuestionRepository
 from src.domain.investment_profile.entities.assessment import Question, QuestionType, QuestionOption
@@ -59,7 +62,7 @@ def _load_questions_once(yaml_path: Path) -> List[Question]:
             _QUESTIONS_LOADED = True
 
         except Exception as e:
-            print(f"[ERROR] 설문 로드 실패: {e}")
+            logger.error(f"설문 로드 실패: {e}")
             _QUESTIONS_LOADED = True
 
         return _QUESTIONS_CACHE

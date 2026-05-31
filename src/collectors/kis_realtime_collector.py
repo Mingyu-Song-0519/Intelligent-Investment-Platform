@@ -15,7 +15,7 @@ import requests
 try:
     import websockets
 except ImportError:
-    print("[ERROR] websockets 라이브러리가 필요합니다: pip install websockets")
+    logger.error("websockets 라이브러리가 필요합니다: pip install websockets")
     sys.exit(1)
 
 # KIS REST API 모듈 사용

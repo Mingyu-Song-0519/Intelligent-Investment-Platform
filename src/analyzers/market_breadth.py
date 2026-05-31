@@ -3,11 +3,14 @@
 "지수는 오르는데, 실제로 몇 종목이 오르고 있나?"를 분석
 2024-2025 트렌드: 대형주 쏠림 장세 감지
 """
+import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional, List
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 import FinanceDataReader as fdr
 
 
@@ -78,7 +81,7 @@ class MarketBreadthAnalyzer:
             return result
             
         except Exception as e:
-            print(f"시장 데이터 수집 오류: {e}")
+            logger.error(f"시장 데이터 수집 오류: {e}")
             return pd.DataFrame()
     
     def advance_decline_ratio(self) -> Dict:

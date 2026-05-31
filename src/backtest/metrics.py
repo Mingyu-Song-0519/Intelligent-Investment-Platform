@@ -1,9 +1,12 @@
 """
 성과 지표 모듈 - 수익률, 위험, 거래 통계 계산
 """
+import logging
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict
+
+logger = logging.getLogger(__name__)
 
 
 class PerformanceMetrics:
@@ -229,34 +232,29 @@ class PerformanceMetrics:
         """성과 지표 출력"""
         metrics = self.get_all_metrics(trades_df)
         
-        print("\n" + "=" * 50)
-        print("📊 백테스팅 성과 리포트")
-        print("=" * 50)
-        
-        print("\n📈 수익성 지표")
-        print(f"  • 총 수익률: {metrics['total_return']:.2%}")
-        print(f"  • 연환산 수익률 (CAGR): {metrics['cagr']:.2%}")
-        print(f"  • 최종 자산: ₩{metrics['final_equity']:,.0f}")
-        
-        print("\n⚠️ 위험 지표")
-        print(f"  • 최대 낙폭 (MDD): {metrics['max_drawdown']:.2%}")
-        print(f"  • MDD 기간: {metrics['max_dd_duration']}일")
-        print(f"  • 연환산 변동성: {metrics['volatility']:.2%}")
-        
-        print("\n📐 위험 조정 수익률")
-        print(f"  • 샤프 비율: {metrics['sharpe_ratio']:.2f}")
-        print(f"  • 소르티노 비율: {metrics['sortino_ratio']:.2f}")
-        print(f"  • 칼마 비율: {metrics['calmar_ratio']:.2f}")
-        
+        logger.info("=" * 50)
+        logger.info("백테스팅 성과 리포트")
+        logger.info("=" * 50)
+        logger.info("수익성 지표")
+        logger.info(f"  총 수익률: {metrics['total_return']:.2%}")
+        logger.info(f"  연환산 수익률 (CAGR): {metrics['cagr']:.2%}")
+        logger.info(f"  최종 자산: {metrics['final_equity']:,.0f}원")
+        logger.info("위험 지표")
+        logger.info(f"  최대 낙폭 (MDD): {metrics['max_drawdown']:.2%}")
+        logger.info(f"  MDD 기간: {metrics['max_dd_duration']}일")
+        logger.info(f"  연환산 변동성: {metrics['volatility']:.2%}")
+        logger.info("위험 조정 수익률")
+        logger.info(f"  샤프 비율: {metrics['sharpe_ratio']:.2f}")
+        logger.info(f"  소르티노 비율: {metrics['sortino_ratio']:.2f}")
+        logger.info(f"  칼마 비율: {metrics['calmar_ratio']:.2f}")
         if 'total_trades' in metrics:
-            print("\n💹 거래 통계")
-            print(f"  • 총 거래 횟수: {metrics['total_trades']}회")
-            print(f"  • 승률: {metrics['win_rate']:.2%}")
-            print(f"  • 수익 팩터: {metrics['profit_factor']:.2f}")
-            print(f"  • 평균 수익: ₩{metrics['avg_win']:,.0f}")
-            print(f"  • 평균 손실: ₩{metrics['avg_loss']:,.0f}")
-        
-        print("\n" + "=" * 50)
+            logger.info("거래 통계")
+            logger.info(f"  총 거래 횟수: {metrics['total_trades']}회")
+            logger.info(f"  승률: {metrics['win_rate']:.2%}")
+            logger.info(f"  수익 팩터: {metrics['profit_factor']:.2f}")
+            logger.info(f"  평균 수익: {metrics['avg_win']:,.0f}원")
+            logger.info(f"  평균 손실: {metrics['avg_loss']:,.0f}원")
+        logger.info("=" * 50)
 
 
 # 사용 예시

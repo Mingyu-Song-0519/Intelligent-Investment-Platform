@@ -5,9 +5,12 @@ Clean Architecture:
 - 모델 저장/로드의 Infrastructure 계층
 - 파일 시스템 세부사항을 Service Layer로부터 분리
 """
+import logging
 import json
 import hashlib
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -105,7 +108,7 @@ class ModelRepository:
             with open(latest_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[ERROR] Failed to load metadata: {e}")
+            logger.error(f"Failed to load metadata: {e}")
             return None
     
     def get_model_prefix(self, ticker: str) -> Optional[str]:

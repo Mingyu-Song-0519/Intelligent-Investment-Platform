@@ -1,9 +1,12 @@
 """
 다중 종목 동시 수집 모듈 - ThreadPoolExecutor를 활용한 병렬 데이터 수집
 """
+import logging
 import pandas as pd
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger(__name__)
 
 from config import DEFAULT_TICKERS, US_TICKERS, DEFAULT_PERIOD
 from src.collectors.stock_collector import StockDataCollector
@@ -72,13 +75,13 @@ class MultiStockCollector:
                 ticker, df, error = future.result()
                 if error:
                     self.errors[ticker] = error
-                    print(f"[ERROR] {ticker}: {error}")
+                    logger.error(f"{ticker}: {error}")
                 elif not df.empty:
                     self.results[ticker] = df
         
-        print(f"\n[INFO] 수집 완료: {len(self.results)}/{len(tickers)} 종목")
+        logger.info(f"수집 완료: {len(self.results)}/{len(tickers)} 종목")
         if self.errors:
-            print(f"[WARNING] 실패: {len(self.errors)} 종목")
+            logger.warning(f"실패: {len(self.errors)} 종목")
         
         return self.results
     
@@ -125,7 +128,7 @@ class MultiStockCollector:
                     if info:
                         info_results[ticker] = info
                 except Exception as e:
-                    print(f"[ERROR] {ticker} 정보 조회 실패: {e}")
+                    logger.error(f"{ticker} 정보 조회 실패: {e}")
         
         return info_results
     

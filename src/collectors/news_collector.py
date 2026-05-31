@@ -1,6 +1,7 @@
 """
 뉴스 수집 모듈 - 네이버 금융 뉴스 및 Google News RSS 피드 수집
 """
+import logging
 import requests
 from bs4 import BeautifulSoup
 import feedparser
@@ -12,6 +13,8 @@ from urllib.parse import quote, urljoin
 import re
 
 from config import DATABASE_PATH
+
+logger = logging.getLogger(__name__)
 
 
 class NewsCollector:
@@ -88,7 +91,7 @@ class NewsCollector:
                 # 네이버 금융 뉴스 URL (파라미터 추가)
                 url = f"https://finance.naver.com/item/news_news.naver?code={clean_ticker}&page={page}&sm=title_entity_id.basic&clusterId="
 
-                print(f"[INFO] 네이버 금융 뉴스 수집 중... (페이지 {page}/{max_pages})")
+                logger.info(f"네이버 금융 뉴스 수집 중... (페이지 {page}/{max_pages})")
 
                 # Referer 헤더 추가 (필수)
                 headers = {
@@ -104,12 +107,12 @@ class NewsCollector:
                 news_items = soup.select('.tb_cont .title')
 
                 if not news_items:
-                    print(f"[INFO] {page}페이지에서 뉴스를 찾을 수 없습니다.")
+                    logger.info(f"{page}페이지에서 뉴스를 찾을 수 없습니다.")
                     # 디버깅: 왜 못 찾는지 HTML 확인
                     try:
                         with open(f"failed_page_{page}.html", "wb") as f:
                             f.write(response.content)
-                        print(f"[DEBUG] failed_page_{page}.html 저장됨")
+                        logger.debug(f"failed_page_{page}.html 저장됨")
                     except Exception:
                         pass
                     break
@@ -168,16 +171,16 @@ class NewsCollector:
                         collected_titles.append(title)
 
                     except Exception as e:
-                        print(f"[ERROR] 뉴스 아이템 처리 실패: {e}")
+                        logger.error(f"뉴스 아이템 처리 실패: {e}")
                         continue
 
                 # 페이지 간 Rate limiting (목록 요청만)
                 time.sleep(0.5)
 
         except Exception as e:
-            print(f"[ERROR] 네이버 금융 뉴스 수집 실패: {e}")
+            logger.error(f"네이버 금융 뉴스 수집 실패: {e}")
 
-        print(f"[INFO] 네이버 금융에서 {len(news_list)}개 뉴스 수집 완료")
+        logger.info(f"네이버 금융에서 {len(news_list)}개 뉴스 수집 완료")
         return news_list
 
     def _fetch_naver_news_detail(self, url: str) -> Dict:
@@ -250,7 +253,7 @@ class NewsCollector:
             }
 
         except Exception as e:
-            print(f"[ERROR] 뉴스 상세 정보 수집 실패: {e}")
+            logger.error(f"뉴스 상세 정보 수집 실패: {e}")
             return {'date': None, 'content': ''}
 
     def fetch_google_news_rss(
@@ -275,13 +278,13 @@ class NewsCollector:
             encoded_query = quote(query)
             rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
 
-            print(f"[INFO] Google News RSS 피드 수집 중... (검색어: {query})")
+            logger.info(f"Google News RSS 피드 수집 중... (검색어: {query})")
 
             # RSS 피드 파싱
             feed = feedparser.parse(rss_url)
 
             if not feed.entries:
-                print(f"[INFO] Google News에서 '{query}' 관련 뉴스를 찾을 수 없습니다.")
+                logger.info(f"Google News에서 '{query}' 관련 뉴스를 찾을 수 없습니다.")
                 return news_list
 
             for entry in feed.entries[:max_items]:
@@ -305,13 +308,13 @@ class NewsCollector:
                     news_list.append(news_item)
 
                 except Exception as e:
-                    print(f"[ERROR] RSS 아이템 처리 실패: {e}")
+                    logger.error(f"RSS 아이템 처리 실패: {e}")
                     continue
 
-            print(f"[INFO] Google News에서 {len(news_list)}개 뉴스 수집 완료")
+            logger.info(f"Google News에서 {len(news_list)}개 뉴스 수집 완료")
 
         except Exception as e:
-            print(f"[ERROR] Google News RSS 수집 실패: {e}")
+            logger.error(f"Google News RSS 수집 실패: {e}")
 
         return news_list
 
@@ -365,12 +368,12 @@ class NewsCollector:
         
         for feed_info in rss_feeds:
             try:
-                print(f"[INFO] {feed_info['name']} RSS 수집 중...")
+                logger.info(f"{feed_info['name']} RSS 수집 중...")
                 
                 feed = feedparser.parse(feed_info['url'])
                 
                 if not feed.entries:
-                    print(f"[INFO] {feed_info['name']}에서 뉴스를 찾을 수 없습니다.")
+                    logger.info(f"{feed_info['name']}에서 뉴스를 찾을 수 없습니다.")
                     continue
                 
                 for entry in feed.entries:
@@ -426,17 +429,17 @@ class NewsCollector:
                             break
                         
                     except Exception as e:
-                        print(f"[ERROR] RSS 아이템 처리 실패: {e}")
+                        logger.error(f"RSS 아이템 처리 실패: {e}")
                         continue
                 
                 if len(news_list) >= max_items:
                     break
                     
             except Exception as e:
-                print(f"[ERROR] {feed_info['name']} RSS 수집 실패: {e}")
+                logger.error(f"{feed_info['name']} RSS 수집 실패: {e}")
                 continue
         
-        print(f"[INFO] 한국 언론사 RSS에서 {len(news_list)}개 뉴스 수집 완료 (종목: {company_name})")
+        logger.info(f"한국 언론사 RSS에서 {len(news_list)}개 뉴스 수집 완료 (종목: {company_name})")
         return news_list
 
 
@@ -461,13 +464,13 @@ class NewsCollector:
             # Yahoo Finance RSS URL
             rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
 
-            print(f"[INFO] Yahoo Finance RSS 피드 수집 중... (종목: {ticker})")
+            logger.info(f"Yahoo Finance RSS 피드 수집 중... (종목: {ticker})")
 
             # RSS 피드 파싱
             feed = feedparser.parse(rss_url)
 
             if not feed.entries:
-                print(f"[INFO] Yahoo Finance에서 '{ticker}' 관련 뉴스를 찾을 수 없습니다.")
+                logger.info(f"Yahoo Finance에서 '{ticker}' 관련 뉴스를 찾을 수 없습니다.")
                 return news_list
 
             for entry in feed.entries[:max_items]:
@@ -491,13 +494,13 @@ class NewsCollector:
                     news_list.append(news_item)
 
                 except Exception as e:
-                    print(f"[ERROR] Yahoo RSS 아이템 처리 실패: {e}")
+                    logger.error(f"Yahoo RSS 아이템 처리 실패: {e}")
                     continue
 
-            print(f"[INFO] Yahoo Finance에서 {len(news_list)}개 뉴스 수집 완료")
+            logger.info(f"Yahoo Finance에서 {len(news_list)}개 뉴스 수집 완료")
 
         except Exception as e:
-            print(f"[ERROR] Yahoo Finance RSS 수집 실패: {e}")
+            logger.error(f"Yahoo Finance RSS 수집 실패: {e}")
 
         return news_list
 
@@ -523,13 +526,13 @@ class NewsCollector:
             encoded_query = quote(query)
             rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
 
-            print(f"[INFO] Google News (EN) RSS 피드 수집 중... (검색어: {query})")
+            logger.info(f"Google News (EN) RSS 피드 수집 중... (검색어: {query})")
 
             # RSS 피드 파싱
             feed = feedparser.parse(rss_url)
 
             if not feed.entries:
-                print(f"[INFO] Google News (EN)에서 '{query}' 관련 뉴스를 찾을 수 없습니다.")
+                logger.info(f"Google News (EN)에서 '{query}' 관련 뉴스를 찾을 수 없습니다.")
                 return news_list
 
             for entry in feed.entries[:max_items]:
@@ -553,13 +556,13 @@ class NewsCollector:
                     news_list.append(news_item)
 
                 except Exception as e:
-                    print(f"[ERROR] RSS 아이템 처리 실패: {e}")
+                    logger.error(f"RSS 아이템 처리 실패: {e}")
                     continue
 
-            print(f"[INFO] Google News (EN)에서 {len(news_list)}개 뉴스 수집 완료")
+            logger.info(f"Google News (EN)에서 {len(news_list)}개 뉴스 수집 완료")
 
         except Exception as e:
-            print(f"[ERROR] Google News (EN) RSS 수집 실패: {e}")
+            logger.error(f"Google News (EN) RSS 수집 실패: {e}")
 
         return news_list
 
@@ -659,12 +662,12 @@ class NewsCollector:
                         saved_count += 1
 
                 except Exception as e:
-                    print(f"[ERROR] 뉴스 저장 실패: {e}")
+                    logger.error(f"뉴스 저장 실패: {e}")
                     continue
 
             conn.commit()
 
-        print(f"[INFO] {ticker}: {saved_count}개 뉴스 DB 저장 완료")
+        logger.info(f"{ticker}: {saved_count}개 뉴스 DB 저장 완료")
         return saved_count
 
     def collect_and_save(
@@ -713,7 +716,7 @@ class NewsCollector:
         if all_news:
             return self.save_news(ticker, all_news)
         else:
-            print(f"[INFO] {ticker}: 수집된 뉴스가 없습니다.")
+            logger.info(f"{ticker}: 수집된 뉴스가 없습니다.")
             return 0
 
     def get_news(

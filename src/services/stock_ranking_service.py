@@ -96,7 +96,7 @@ class StockRankingService:
                 from src.models.ensemble_predictor import EnsemblePredictor
                 self._ensemble_predictor = EnsemblePredictor()
             except Exception as e:
-                print(f"[WARNING] EnsemblePredictor 로드 실패: {e}")
+                logger.warning(f"EnsemblePredictor 로드 실패: {e}")
         return self._ensemble_predictor
     
     def _get_data_collector(self):
@@ -112,7 +112,7 @@ class StockRankingService:
                     from src.collectors.stock_collector import StockDataCollector
                     self._data_collector = StockDataCollector()
                 except Exception as e:
-                    print(f"[WARNING] StockDataCollector 로드 실패: {e}")
+                    logger.warning(f"StockDataCollector 로드 실패: {e}")
         return self._data_collector
     
     def get_personalized_ranking(
@@ -345,7 +345,7 @@ class StockRankingService:
 
                             return score, prediction, confidence
             except Exception as e:
-                print(f"[WARNING] AI 예측 실패 ({ticker}): {e}")
+                logger.warning(f"AI 예측 실패 ({ticker}): {e}")
         
         # 폴백: 시뮬레이션
         np.random.seed(hash(ticker + "ai") % 2**32)

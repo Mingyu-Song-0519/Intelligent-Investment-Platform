@@ -2,8 +2,11 @@
 뉴스 및 텍스트 감성 분석 모듈
 Phase F: LLMSentimentAnalyzer (Gemini) 통합
 """
+import logging
 from typing import List, Dict, Optional
 import re
+
+logger = logging.getLogger(__name__)
 
 try:
     from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
@@ -71,15 +74,15 @@ class SentimentAnalyzer:
                 from src.infrastructure.external.gemini_client import GeminiClient
                 if isinstance(gemini_client, GeminiClient) and gemini_client.is_available():
                     self.llm_analyzer = LLMSentimentAnalyzer(llm_client=gemini_client)
-                    print("[INFO] Gemini LLM 감성 분석기 초기화 완료")
+                    logger.info("Gemini LLM 감성 분석기 초기화 완료")
                 else:
-                    print("[WARNING] Gemini API 키가 설정되지 않았습니다. 사이드바 '🔑 AI API 설정'에서 입력해주세요.")
+                    logger.warning("Gemini API 키가 설정되지 않았습니다. 사이드바 'AI API 설정'에서 입력해주세요.")
                     self.use_llm = False
             except Exception as e:
-                print(f"[WARNING] LLM 분석기 초기화 실패: {e}. 기본 분석 사용.")
+                logger.warning(f"LLM 분석기 초기화 실패: {e}. 기본 분석 사용.")
                 self.use_llm = False
         elif use_llm and not LLM_SENTIMENT_AVAILABLE:
-            print("[WARNING] LLMSentimentAnalyzer를 불러올 수 없습니다. 기본 분석 사용.")
+            logger.warning("LLMSentimentAnalyzer를 불러올 수 없습니다. 기본 분석 사용.")
             self.use_llm = False
         
         if use_deep_learning:
@@ -88,12 +91,12 @@ class SentimentAnalyzer:
     def _load_dl_model(self):
         """딥러닝 모델 로드 (KR-FinBert-SC)"""
         if not TRANSFORMERS_AVAILABLE:
-            print("[WARNING] transformers 라이브러리가 설치되지 않았습니다. 기본 분석을 사용합니다.")
+            logger.warning("transformers 라이브러리가 설치되지 않았습니다. 기본 분석을 사용합니다.")
             self.use_deep_learning = False
             return
 
         try:
-            print("[INFO] 딥러닝 감성 분석 모델 로드 중... (snunlp/KR-FinBert-SC)")
+            logger.info("딥러닝 감성 분석 모델 로드 중... (snunlp/KR-FinBert-SC)")
             # GPU 사용 가능 여부 확인
             device = 0 if torch.cuda.is_available() else -1
             
@@ -104,9 +107,9 @@ class SentimentAnalyzer:
                 tokenizer="snunlp/KR-FinBert-SC",
                 device=device
             )
-            print(f"[INFO] 모델 로드 완료 (Device: {'GPU' if device==0 else 'CPU'})")
+            logger.info(f"모델 로드 완료 (Device: {'GPU' if device==0 else 'CPU'})")
         except Exception as e:
-            print(f"[ERROR] 모델 로드 실패: {e}")
+            logger.error(f"모델 로드 실패: {e}")
             self.use_deep_learning = False
 
     def analyze_text_llm(self, text: str) -> tuple:
@@ -128,7 +131,7 @@ class SentimentAnalyzer:
                 'source': result.source
             }
         except Exception as e:
-            print(f"[WARNING] LLM 감성 분석 실패: {e}. 기본 분석 사용.")
+            logger.warning(f"LLM 감성 분석 실패: {e}. 기본 분석 사용.")
             return self.analyze_text(text)
 
     def analyze_text(self, text: str) -> tuple:
@@ -181,7 +184,7 @@ class SentimentAnalyzer:
             return 0.0, {'label': 'neutral'}
             
         except Exception as e:
-            print(f"[ERROR] 영문 감성 분석 중 오류: {e}")
+            logger.error(f"영문 감성 분석 중 오류: {e}")
             return 0.0, {'label': 'neutral'}
 
     def analyze_text_deep(self, text: str) -> tuple:
@@ -214,7 +217,7 @@ class SentimentAnalyzer:
             return score, {'label': label, 'confidence': confidence}
             
         except Exception as e:
-            print(f"[ERROR] 딥러닝 분석 중 오류: {e}")
+            logger.error(f"딥러닝 분석 중 오류: {e}")
             return self.analyze_text(text)
         
     def analyze_sentiment(self, text: str) -> float:

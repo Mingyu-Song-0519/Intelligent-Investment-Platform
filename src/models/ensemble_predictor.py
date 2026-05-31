@@ -2,11 +2,14 @@
 AI 모델 앙상블 전략 - LSTM + XGBoost + Transformer 결합 예측
 다중 모델의 예측을 결합하여 신뢰도 높은 예측 제공
 """
+import logging
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Any
 
 from config import ENSEMBLE_CONFIG
+
+logger = logging.getLogger(__name__)
 from src.models.predictor import LSTMPredictor, XGBoostClassifier, DataPreprocessor
 
 # Transformer 모델
@@ -15,7 +18,7 @@ try:
     TRANSFORMER_AVAILABLE = True
 except ImportError:
     TRANSFORMER_AVAILABLE = False
-    print("[WARNING] Transformer model not available.")
+    logger.warning("Transformer model not available.")
 
 # 메타 모델용 (선택적)
 try:
@@ -24,7 +27,7 @@ try:
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    print("[WARNING] scikit-learn not fully available. Meta models may be limited.")
+    logger.warning("scikit-learn not fully available. Meta models may be limited.")
 
 
 class EnsemblePredictor:
@@ -104,14 +107,14 @@ class EnsemblePredictor:
         results = {}
         
         if incremental:
-            print("[INFO] === Incremental Learning Mode ===")
+            logger.info("=== Incremental Learning Mode ===")
 
         # LSTM 학습
         if train_lstm:
             if self.lstm_predictor is None:
                 self.lstm_predictor = LSTMPredictor()
 
-            print("[INFO] LSTM 모델 학습 중...")
+            logger.info("LSTM 모델 학습 중...")
             lstm_result = self.lstm_predictor.train(
                 df=df,
                 feature_cols=feature_cols,
@@ -122,17 +125,17 @@ class EnsemblePredictor:
             results['lstm'] = lstm_result
             
             if incremental and lstm_result.get('incremental'):
-                print(f"[SUCCESS] LSTM Fine-tuning 완료 - RMSE: {lstm_result['rmse']:.2f} "
-                      f"(Replay: {lstm_result.get('replay_samples', 0)}, New: {lstm_result.get('new_samples', 0)})")
+                logger.info(f"LSTM Fine-tuning 완료 - RMSE: {lstm_result['rmse']:.2f} "
+                            f"(Replay: {lstm_result.get('replay_samples', 0)}, New: {lstm_result.get('new_samples', 0)})")
             else:
-                print(f"[SUCCESS] LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
+                logger.info(f"LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
 
         # XGBoost 학습
         if train_xgboost:
             if self.xgboost_classifier is None:
                 self.xgboost_classifier = XGBoostClassifier()
 
-            print("[INFO] XGBoost 모델 학습 중...")
+            logger.info("XGBoost 모델 학습 중...")
             xgb_result = self.xgboost_classifier.train(
                 df=df,
                 feature_cols=feature_cols,
@@ -142,30 +145,30 @@ class EnsemblePredictor:
             results['xgboost'] = xgb_result
             
             if incremental and xgb_result.get('incremental'):
-                print(f"[SUCCESS] XGBoost Incremental 완료 - Accuracy: {xgb_result['accuracy']:.2%} "
-                      f"(Estimators: {xgb_result.get('total_estimators', 'N/A')})")
+                logger.info(f"XGBoost Incremental 완료 - Accuracy: {xgb_result['accuracy']:.2%} "
+                            f"(Estimators: {xgb_result.get('total_estimators', 'N/A')})")
             else:
-                print(f"[SUCCESS] XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
+                logger.info(f"XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
 
         # Transformer 학습
         if train_transformer and TRANSFORMER_AVAILABLE:
             if self.transformer_predictor is None:
                 self.transformer_predictor = TransformerPredictor()
 
-            print("[INFO] Transformer 모델 학습 중...")
+            logger.info("Transformer 모델 학습 중...")
             transformer_result = self.transformer_predictor.train(
                 df=df,
                 epochs=50 if not incremental else 5,  # Incremental 시 적은 epochs
                 verbose=verbose
             )
             results['transformer'] = transformer_result
-            print(f"[SUCCESS] Transformer 학습 완료 - Val Loss: {transformer_result['val_loss']:.4f}")
+            logger.info(f"Transformer 학습 완료 - Val Loss: {transformer_result['val_loss']:.4f}")
 
         # 스태킹 전략인 경우 메타 모델 학습 (점진적 학습 시 스킵)
         if self.strategy == 'stacking' and train_lstm and train_xgboost and not incremental:
-            print("[INFO] 메타 모델 학습 중...")
+            logger.info("메타 모델 학습 중...")
             self._train_meta_models(df, feature_cols)
-            print("[SUCCESS] 메타 모델 학습 완료")
+            logger.info("메타 모델 학습 완료")
 
         return results
 
@@ -176,7 +179,7 @@ class EnsemblePredictor:
     ):
         """메타 모델 학습 (스태킹)"""
         if not SKLEARN_AVAILABLE:
-            print("[WARNING] scikit-learn이 없어 메타 모델을 학습할 수 없습니다.")
+            logger.warning("scikit-learn이 없어 메타 모델을 학습할 수 없습니다.")
             return
 
         # 기본 모델들의 예측을 입력으로 사용
@@ -213,7 +216,7 @@ class EnsemblePredictor:
                 continue
 
         if len(lstm_predictions) < 10:
-            print("[WARNING] 메타 모델 학습 데이터가 부족합니다.")
+            logger.warning("메타 모델 학습 데이터가 부족합니다.")
             return
 
         # 메타 모델 입력 생성
@@ -227,7 +230,7 @@ class EnsemblePredictor:
         self.meta_model_classification = LogisticRegression()
         self.meta_model_classification.fit(X_meta, actual_directions)
 
-        print(f"[INFO] 메타 모델 학습 샘플 수: {len(lstm_predictions)}")
+        logger.info(f"메타 모델 학습 샘플 수: {len(lstm_predictions)}")
 
     def predict_price(
         self,
@@ -263,7 +266,7 @@ class EnsemblePredictor:
                 transformer_pred = self.transformer_predictor.predict(df)
                 predictions['transformer'] = float(transformer_pred)
             except Exception as e:
-                print(f"[WARNING] Transformer 예측 실패: {e}")
+                logger.warning(f"Transformer 예측 실패: {e}")
 
         # 앙상블 전략에 따른 최종 예측
         ensemble_pred = None
@@ -537,7 +540,7 @@ class EnsemblePredictor:
         if self.transformer_predictor and self.transformer_predictor.model:
             self.transformer_predictor.save_model(f"{prefix}_transformer.keras")
 
-        print(f"[INFO] 앙상블 모델 저장 완료: {prefix}")
+        logger.info(f"앙상블 모델 저장 완료: {prefix}")
 
     def load_models(self, prefix: str = 'ensemble'):
         """앙상블 모델들 로드"""
@@ -546,14 +549,14 @@ class EnsemblePredictor:
                 self.lstm_predictor = LSTMPredictor()
             self.lstm_predictor.load(f"{prefix}_lstm")
         except Exception as e:
-            print(f"[WARNING] LSTM 모델 로드 실패: {e}")
+            logger.warning(f"LSTM 모델 로드 실패: {e}")
 
         try:
             if self.xgboost_classifier is None:
                 self.xgboost_classifier = XGBoostClassifier()
             self.xgboost_classifier.load(f"{prefix}_xgboost")
         except Exception as e:
-            print(f"[WARNING] XGBoost 모델 로드 실패: {e}")
+            logger.warning(f"XGBoost 모델 로드 실패: {e}")
 
         try:
             if TRANSFORMER_AVAILABLE:
@@ -561,9 +564,9 @@ class EnsemblePredictor:
                     self.transformer_predictor = TransformerPredictor()
                 self.transformer_predictor.load_model(f"{prefix}_transformer.keras")
         except Exception as e:
-            print(f"[WARNING] Transformer 모델 로드 실패: {e}")
+            logger.warning(f"Transformer 모델 로드 실패: {e}")
 
-        print(f"[INFO] 앙상블 모델 로드 완료: {prefix}")
+        logger.info(f"앙상블 모델 로드 완료: {prefix}")
 
     def set_weights(self, weights: Dict[str, float]):
         """
@@ -574,11 +577,11 @@ class EnsemblePredictor:
         """
         total = sum(weights.values())
         if abs(total - 1.0) > 0.01:
-            print(f"[WARNING] 가중치 합이 1이 아닙니다: {total}. 정규화합니다.")
+            logger.warning(f"가중치 합이 1이 아닙니다: {total}. 정규화합니다.")
             weights = {k: v/total for k, v in weights.items()}
 
         self.weights = weights
-        print(f"[INFO] 가중치 업데이트: {weights}")
+        logger.info(f"가중치 업데이트: {weights}")
 
     def auto_adjust_weights(
         self, 
@@ -600,7 +603,7 @@ class EnsemblePredictor:
             조정된 가중치 딕셔너리
         """
         if not validation_results:
-            print("[WARNING] 검증 결과가 없습니다. 기존 가중치 유지.")
+            logger.warning("검증 결과가 없습니다. 기존 가중치 유지.")
             return self.weights
         
         # 성능 점수가 0 이하인 모델 제외
@@ -642,9 +645,7 @@ class EnsemblePredictor:
         old_weights = self.weights.copy()
         self.weights = new_weights
         
-        print(f"[INFO] 가중치 자동 조정:")
-        print(f"  이전: {old_weights}")
-        print(f"  이후: {new_weights}")
+        logger.info(f"가중치 자동 조정: 이전={old_weights}, 이후={new_weights}")
         
         return new_weights
 
@@ -669,7 +670,7 @@ class EnsemblePredictor:
         
         # 데이터 준비
         if len(df) < 50:
-            print("[WARNING] 평가 데이터가 부족합니다.")
+            logger.warning("평가 데이터가 부족합니다.")
             return results
         
         # 마지막 20% 데이터로 평가
@@ -693,8 +694,8 @@ class EnsemblePredictor:
                         acc = (y_pred == actual_direction.values).mean()
                         results['lstm'] = float(acc)
             except Exception as e:
-                print(f"[WARNING] LSTM 평가 실패: {e}")
-        
+                logger.warning(f"LSTM 평가 실패: {e}")
+
         # XGBoost 평가
         if self.xgboost_classifier is not None:
             try:
@@ -705,8 +706,8 @@ class EnsemblePredictor:
                         acc = (y_pred == actual_direction.values).mean()
                         results['xgboost'] = float(acc)
             except Exception as e:
-                print(f"[WARNING] XGBoost 평가 실패: {e}")
-        
+                logger.warning(f"XGBoost 평가 실패: {e}")
+
         # Transformer 평가
         if self.transformer_predictor is not None:
             try:
@@ -717,9 +718,9 @@ class EnsemblePredictor:
                         acc = (y_pred == actual_direction.values).mean()
                         results['transformer'] = float(acc)
             except Exception as e:
-                print(f"[WARNING] Transformer 평가 실패: {e}")
-        
-        print(f"[INFO] 모델 평가 결과: {results}")
+                logger.warning(f"Transformer 평가 실패: {e}")
+
+        logger.info(f"모델 평가 결과: {results}")
         return results
 
 

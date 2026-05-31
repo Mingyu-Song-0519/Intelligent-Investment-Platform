@@ -2,12 +2,15 @@
 알림 시스템 모듈 - VIX 급등, MDD 초과, RSI 과매수/과매도 등 주요 이벤트 알림
 2024-2025 트렌드: 실시간 리스크 모니터링 및 자동 알림
 """
+import logging
 import smtplib
 import requests
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Optional, Callable
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
@@ -292,7 +295,7 @@ class NotificationManager:
             try:
                 callback(alert)
             except Exception as e:
-                print(f"[WARNING] Callback error: {e}")
+                logger.warning(f"Callback error: {e}")
         
         # 알림 발송
         if self.config.email_enabled:
@@ -309,7 +312,7 @@ class NotificationManager:
             self.config.smtp_password,
             self.config.recipient_email
         ]):
-            print("[WARNING] Email configuration incomplete")
+            logger.warning("Email configuration incomplete")
             return False
         
         try:
@@ -331,11 +334,11 @@ class NotificationManager:
                     msg.as_string()
                 )
             
-            print(f"[SUCCESS] Email sent: {alert.title}")
+            logger.info(f"Email sent: {alert.title}")
             return True
             
         except Exception as e:
-            print(f"[ERROR] Email send failed: {e}")
+            logger.error(f"Email send failed: {e}")
             return False
     
     def _send_telegram(self, alert: Alert) -> bool:
@@ -344,7 +347,7 @@ class NotificationManager:
             self.config.telegram_bot_token,
             self.config.telegram_chat_id
         ]):
-            print("[WARNING] Telegram configuration incomplete")
+            logger.warning("Telegram configuration incomplete")
             return False
         
         try:
@@ -359,14 +362,14 @@ class NotificationManager:
             response = requests.post(url, json=payload, timeout=10)
             
             if response.status_code == 200:
-                print(f"[SUCCESS] Telegram sent: {alert.title}")
+                logger.info(f"Telegram sent: {alert.title}")
                 return True
             else:
-                print(f"[ERROR] Telegram API error: {response.text}")
+                logger.error(f"Telegram API error: {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"[ERROR] Telegram send failed: {e}")
+            logger.error(f"Telegram send failed: {e}")
             return False
     
     def get_recent_alerts(self, count: int = 10) -> List[Alert]:

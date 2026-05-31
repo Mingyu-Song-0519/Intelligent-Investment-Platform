@@ -1,13 +1,16 @@
 import requests
 import json
 import time
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 import os
-import sys
 
-# 프로젝트 루트 경로 설정
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+logger = logging.getLogger(__name__)
+
+# M3: 토큰을 프로젝트 루트가 아닌 OS 사용자 설정 디렉터리에 저장 (CWE-312)
+_APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "jarvis-stock"
+_APP_DIR.mkdir(parents=True, exist_ok=True)
 
 class KisApi:
     """한국투자증권 REST API 클라이언트"""
@@ -32,7 +35,8 @@ class KisApi:
             self.cano = account_no[:8]
             self.acnt_prdt_cd = account_no[8:]
             
-        self.token_file = PROJECT_ROOT / "token.json"
+        # M3: %LOCALAPPDATA%\jarvis-stock\token.json (repo 루트에서 분리)
+        self.token_file = _APP_DIR / "token.json"
         self.load_token()
 
     def load_token(self):
@@ -45,9 +49,9 @@ class KisApi:
                     if datetime.now() < expired:
                         self.access_token = data['token']
                         self.token_expired = expired
-                        print(f"[INFO] 저장된 Access Token 로드 (만료: {expired})")
+                        logger.info("저장된 Access Token 로드 (만료: %s)", expired)
         except Exception as e:
-            print(f"[WARNING] 토큰 로드 실패: {e}")
+            logger.warning("토큰 로드 실패: %s", e)
 
     def save_token(self):
         """토큰 파일 저장"""
@@ -59,7 +63,7 @@ class KisApi:
             with open(self.token_file, 'w') as f:
                 json.dump(data, f)
         except Exception as e:
-            print(f"[WARNING] 토큰 저장 실패: {e}")
+            logger.warning("토큰 저장 실패: %s", e)
 
     def get_access_token(self):
         """접근 토큰 발급/갱신"""
@@ -85,14 +89,14 @@ class KisApi:
             self.access_token = data['access_token']
             # 토큰 유효기간 (보통 24시간이지만 안전하게 12시간으로 설정)
             self.token_expired = datetime.now() + timedelta(hours=12)
-            print(f"[INFO] Access Token 발급 성공 (만료: {data.get('access_token_token_expired', 'N/A')})")
+            logger.info(f"Access Token 발급 성공 (만료: {data.get('access_token_token_expired', 'N/A')})")
             
             # 파일 저장
             self.save_token()
             return self.access_token
             
         except Exception as e:
-            print(f"[ERROR] Access Token 발급 실패: {e}")
+            logger.error(f"Access Token 발급 실패: {e}")
             # print(f"Response: {res.text}") # 403 에러 등의 경우 text 확인
             raise
 
@@ -112,10 +116,10 @@ class KisApi:
             res = requests.post(url, headers=headers, data=json.dumps(body))
             res.raise_for_status()
             data = res.json()
-            print(f"[INFO] Approval Key 발급 성공")
+            logger.info("Approval Key 발급 성공")
             return data['approval_key']
         except Exception as e:
-            print(f"[ERROR] Approval Key 발급 실패: {e}")
+            logger.error(f"Approval Key 발급 실패: {e}")
             raise
 
     def get_current_price(self, ticker):
@@ -142,7 +146,7 @@ class KisApi:
             data = res.json()
             
             if data['rt_cd'] != '0':
-                print(f"[ERROR] API 호출 오류: {data['msg1']}")
+                logger.error(f"API 호출 오류: {data['msg1']}")
                 return None
                 
             output = data['output']
@@ -158,7 +162,7 @@ class KisApi:
                 'timestamp': datetime.now()
             }
         except Exception as e:
-            print(f"[ERROR] 현재가 조회 실패 ({ticker}): {e}")
+            logger.error(f"현재가 조회 실패 ({ticker}): {e}")
             return None
 
     def get_orderbook(self, ticker):
@@ -205,5 +209,5 @@ class KisApi:
                 'timestamp': datetime.now()
             }
         except Exception as e:
-            print(f"[ERROR] 호가 조회 실패 ({ticker}): {e}")
+            logger.error(f"호가 조회 실패 ({ticker}): {e}")
             return None

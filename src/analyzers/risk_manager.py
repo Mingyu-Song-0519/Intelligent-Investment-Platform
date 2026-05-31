@@ -1,10 +1,13 @@
 """
 리스크 관리 모듈 - VaR, CVaR, 스트레스 테스팅
 """
+import logging
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from scipy import stats
+
+logger = logging.getLogger(__name__)
 
 
 class RiskManager:
@@ -303,31 +306,26 @@ class RiskManager:
         """리스크 리포트 출력"""
         summary = self.get_risk_summary(confidence, horizon)
         
-        print("\n" + "=" * 60)
-        print("⚠️ 리스크 분석 리포트")
-        print("=" * 60)
-        
-        print(f"\n📊 기본 정보")
-        print(f"  • 포트폴리오 가치: ₩{summary['portfolio_value']:,.0f}")
-        print(f"  • 신뢰수준: {summary['confidence']*100:.0f}%")
-        print(f"  • 분석 기간: {summary['horizon_days']}일")
-        
-        print(f"\n📉 VaR (Value at Risk)")
-        print(f"  • Historical VaR: ₩{summary['historical_var']['var_amount']:,.0f}")
-        print(f"  • Parametric VaR: ₩{summary['parametric_var']['var_amount']:,.0f}")
-        print(f"  • Monte Carlo VaR: ₩{summary['monte_carlo_var']['var_amount']:,.0f}")
-        
-        print(f"\n🔻 CVaR (Expected Shortfall)")
-        print(f"  • CVaR: ₩{summary['cvar']['cvar_amount']:,.0f}")
-        
-        print(f"\n📈 수익률 통계")
-        stats = summary['statistics']
-        print(f"  • 일평균 수익률: {stats['mean_daily_return']*100:.3f}%")
-        print(f"  • 일별 변동성: {stats['std_daily_return']*100:.3f}%")
-        print(f"  • 왜도: {stats['skewness']:.2f}")
-        print(f"  • 첨도: {stats['kurtosis']:.2f}")
-        
-        print("\n" + "=" * 60)
+        logger.info("=" * 60)
+        logger.info("리스크 분석 리포트")
+        logger.info("=" * 60)
+        logger.info("기본 정보")
+        logger.info(f"  포트폴리오 가치: {summary['portfolio_value']:,.0f}원")
+        logger.info(f"  신뢰수준: {summary['confidence']*100:.0f}%")
+        logger.info(f"  분석 기간: {summary['horizon_days']}일")
+        logger.info("VaR (Value at Risk)")
+        logger.info(f"  Historical VaR: {summary['historical_var']['var_amount']:,.0f}원")
+        logger.info(f"  Parametric VaR: {summary['parametric_var']['var_amount']:,.0f}원")
+        logger.info(f"  Monte Carlo VaR: {summary['monte_carlo_var']['var_amount']:,.0f}원")
+        logger.info("CVaR (Expected Shortfall)")
+        logger.info(f"  CVaR: {summary['cvar']['cvar_amount']:,.0f}원")
+        logger.info("수익률 통계")
+        stats_data = summary['statistics']
+        logger.info(f"  일평균 수익률: {stats_data['mean_daily_return']*100:.3f}%")
+        logger.info(f"  일별 변동성: {stats_data['std_daily_return']*100:.3f}%")
+        logger.info(f"  왜도: {stats_data['skewness']:.2f}")
+        logger.info(f"  첨도: {stats_data['kurtosis']:.2f}")
+        logger.info("=" * 60)
 
 
 # 사용 예시

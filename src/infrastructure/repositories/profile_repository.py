@@ -2,11 +2,14 @@
 SQLite 기반 프로필 저장소 구현
 Clean Architecture: Infrastructure Layer - Adapter
 """
+import logging
 import sqlite3
 import json
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.profile_interfaces import IProfileRepository
 from src.domain.investment_profile.entities.investor_profile import InvestorProfile
@@ -70,7 +73,7 @@ class SQLiteProfileRepository(IProfileRepository):
             conn.close()
             return True
         except Exception as e:
-            print(f"[ERROR] 프로필 저장 실패: {e}")
+            logger.error(f"프로필 저장 실패: {e}")
             return False
     
     def load(self, user_id: str) -> Optional[InvestorProfile]:
@@ -99,7 +102,7 @@ class SQLiteProfileRepository(IProfileRepository):
                 last_updated=datetime.fromisoformat(row[6])
             )
         except Exception as e:
-            print(f"[ERROR] 프로필 로드 실패: {e}")
+            logger.error(f"프로필 로드 실패: {e}")
             return None
     
     def delete(self, user_id: str) -> bool:
@@ -119,7 +122,7 @@ class SQLiteProfileRepository(IProfileRepository):
             
             return affected > 0
         except Exception as e:
-            print(f"[ERROR] 프로필 삭제 실패: {e}")
+            logger.error(f"프로필 삭제 실패: {e}")
             return False
     
     def exists(self, user_id: str) -> bool:
@@ -137,7 +140,7 @@ class SQLiteProfileRepository(IProfileRepository):
             
             return result is not None
         except Exception as e:
-            print(f"[ERROR] 프로필 존재 확인 실패: {e}")
+            logger.error(f"프로필 존재 확인 실패: {e}")
             return False
     
     def list_all_users(self) -> List[str]:
@@ -152,5 +155,5 @@ class SQLiteProfileRepository(IProfileRepository):
             
             return [row[0] for row in rows]
         except Exception as e:
-            print(f"[ERROR] 사용자 목록 조회 실패: {e}")
+            logger.error(f"사용자 목록 조회 실패: {e}")
             return []

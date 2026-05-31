@@ -2,11 +2,14 @@
 펀더멘털 분석 모듈 - PER, PBR, ROE, 배당수익률 등 기업 가치 지표
 2024-2025 트렌드: 기술적 분석 + 펀더멘털 결합으로 투자 판단 정확도 향상
 """
+import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class FundamentalAnalyzer:
@@ -38,7 +41,7 @@ class FundamentalAnalyzer:
             self._cache_timestamp = now
             return self._info
         except Exception as e:
-            print(f"종목 정보 수집 오류: {e}")
+            logger.error(f"종목 정보 수집 오류: {e}")
             return {}
     
     def get_valuation_metrics(self) -> Dict:

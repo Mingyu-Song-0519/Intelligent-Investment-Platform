@@ -2,10 +2,13 @@
 Portfolio Repository - Infrastructure Layer
 IPortfolioRepository 인터페이스의 JSON 파일 기반 구현체
 """
+import logging
 import json
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.interfaces import IPortfolioRepository
 from src.domain.entities.stock import PortfolioEntity
@@ -52,7 +55,7 @@ class JSONPortfolioRepository(IPortfolioRepository):
             return True
             
         except Exception as e:
-            print(f"[ERROR] JSONPortfolioRepository.save: {e}")
+            logger.error(f"JSONPortfolioRepository.save: {e}")
             return False
     
     def load(self, portfolio_id: str) -> Optional[PortfolioEntity]:
@@ -81,7 +84,7 @@ class JSONPortfolioRepository(IPortfolioRepository):
             return portfolio
             
         except Exception as e:
-            print(f"[ERROR] JSONPortfolioRepository.load: {e}")
+            logger.error(f"JSONPortfolioRepository.load: {e}")
             return None
     
     def list_all(self) -> List[PortfolioEntity]:
@@ -100,7 +103,7 @@ class JSONPortfolioRepository(IPortfolioRepository):
             return portfolios
             
         except Exception as e:
-            print(f"[ERROR] JSONPortfolioRepository.list_all: {e}")
+            logger.error(f"JSONPortfolioRepository.list_all: {e}")
             return []
     
     def delete(self, portfolio_id: str) -> bool:
@@ -116,7 +119,7 @@ class JSONPortfolioRepository(IPortfolioRepository):
                 return False
                 
         except Exception as e:
-            print(f"[ERROR] JSONPortfolioRepository.delete: {e}")
+            logger.error(f"JSONPortfolioRepository.delete: {e}")
             return False
 
 
@@ -142,7 +145,7 @@ class SessionPortfolioRepository(IPortfolioRepository):
             self.session_state["portfolios"][portfolio.portfolio_id] = portfolio
             return True
         except Exception as e:
-            print(f"[ERROR] SessionPortfolioRepository.save: {e}")
+            logger.error(f"SessionPortfolioRepository.save: {e}")
             return False
     
     def load(self, portfolio_id: str) -> Optional[PortfolioEntity]:
@@ -162,5 +165,5 @@ class SessionPortfolioRepository(IPortfolioRepository):
                 return True
             return False
         except Exception as e:
-            print(f"[ERROR] SessionPortfolioRepository.delete: {e}")
+            logger.error(f"SessionPortfolioRepository.delete: {e}")
             return False

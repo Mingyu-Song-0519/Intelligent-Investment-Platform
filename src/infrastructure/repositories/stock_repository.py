@@ -2,12 +2,15 @@
 YFinance Stock Repository - Infrastructure Layer
 IStockRepository 인터페이스의 yfinance 구현체
 """
+import logging
 import yfinance as yf
 import pandas as pd
 import sqlite3
 from typing import List, Optional, Dict
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from src.domain.repositories.interfaces import IStockRepository
 from src.domain.entities.stock import StockEntity
@@ -131,7 +134,7 @@ class YFinanceStockRepository(IStockRepository):
             return stock
             
         except Exception as e:
-            print(f"[ERROR] YFinanceStockRepository.get_stock_data: {e}")
+            logger.error(f"YFinanceStockRepository.get_stock_data: {e}")
             return None
     
     def get_multiple_stocks(
@@ -173,7 +176,7 @@ class YFinanceStockRepository(IStockRepository):
             }
             
         except Exception as e:
-            print(f"[ERROR] YFinanceStockRepository.get_stock_info: {e}")
+            logger.error(f"YFinanceStockRepository.get_stock_info: {e}")
             return None
     
     def clear_cache(self):
@@ -199,7 +202,7 @@ class YFinanceStockRepository(IStockRepository):
             return True
             
         except Exception as e:
-            print(f"[ERROR] YFinanceStockRepository.save_stock_data: {e}")
+            logger.error(f"YFinanceStockRepository.save_stock_data: {e}")
             return False
     
     def _save_to_database(self, stock: StockEntity) -> bool:
@@ -228,7 +231,7 @@ class YFinanceStockRepository(IStockRepository):
                     ))
                     saved_count += 1
                 except Exception as e:
-                    print(f"[ERROR] DB 저장 실패 ({date}): {e}")
+                    logger.error(f"DB 저장 실패 ({date}): {e}")
             
             # 종목 정보 저장
             try:
@@ -244,11 +247,11 @@ class YFinanceStockRepository(IStockRepository):
                     stock.market_cap
                 ))
             except Exception as e:
-                print(f"[ERROR] 종목 정보 저장 실패: {e}")
+                logger.error(f"종목 정보 저장 실패: {e}")
             
             conn.commit()
         
-        print(f"[INFO] {stock.ticker}: {saved_count}개 데이터 DB 저장 완료")
+        logger.info(f"{stock.ticker}: {saved_count}개 데이터 DB 저장 완료")
         return saved_count > 0
     
     def load_stock_data(
@@ -305,7 +308,7 @@ class YFinanceStockRepository(IStockRepository):
             return self.get_stock_data(ticker)
             
         except Exception as e:
-            print(f"[ERROR] YFinanceStockRepository.load_stock_data: {e}")
+            logger.error(f"YFinanceStockRepository.load_stock_data: {e}")
             return None
     
     def _load_from_database(
@@ -367,7 +370,7 @@ class YFinanceStockRepository(IStockRepository):
             return stock
             
         except Exception as e:
-            print(f"[ERROR] DB 로드 실패: {e}")
+            logger.error(f"DB 로드 실패: {e}")
             return None
 
 

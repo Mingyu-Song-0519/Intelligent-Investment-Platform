@@ -1,9 +1,12 @@
 """
 백테스팅 엔진 모듈 - 포트폴리오 시뮬레이션 및 성과 평가
 """
+import logging
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict, List, Any
+
+logger = logging.getLogger(__name__)
 
 from config import MODELS_DIR
 from src.backtest.strategies import BaseStrategy
@@ -249,14 +252,14 @@ class Backtester:
             
             if save_path:
                 plt.savefig(save_path, dpi=150, bbox_inches='tight')
-                print(f"[INFO] 차트 저장: {save_path}")
+                logger.info(f"차트 저장: {save_path}")
             else:
                 plt.show()
             
             plt.close()
             
         except ImportError:
-            print("[WARNING] matplotlib가 설치되지 않아 시각화를 건너뜁니다.")
+            logger.warning("matplotlib가 설치되지 않아 시각화를 건너뜁니다.")
 
 
 # 사용 예시

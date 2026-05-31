@@ -2,11 +2,14 @@
 변동성 분석 모듈 - VIX 데이터 수집 및 변동성 구간 판단
 2024-2025 트렌드: 시장 스트레스/보험료(VIX)를 통한 리스크 온/오프 판단
 """
+import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import Tuple, Optional
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 
 class VolatilityAnalyzer:
@@ -52,7 +55,7 @@ class VolatilityAnalyzer:
             
             return df
         except Exception as e:
-            print(f"VIX 데이터 수집 오류: {e}")
+            logger.error(f"VIX 데이터 수집 오류: {e}")
             return pd.DataFrame()
     
     def get_current_vix(self) -> Optional[float]:

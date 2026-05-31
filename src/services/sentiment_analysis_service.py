@@ -7,7 +7,10 @@ Clean Architecture:
 - NewsCollector, SentimentAnalyzer에 대한 의존성 주입
 - 비즈니스 로직 캡슐화
 """
+import logging
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 import numpy as np
 from typing import Any, Dict, List, Optional
 from src.collectors.news_collector import NewsCollector
@@ -89,7 +92,7 @@ class SentimentAnalysisService:
             return self._extract_features(sentiments)
             
         except Exception as e:
-            print(f"[WARNING] 감성 피처 생성 오류: {e}")
+            logger.warning(f"감성 피처 생성 오류: {e}")
             return self._get_neutral_features()
     
     def get_batch_sentiment_for_screener(self, tickers_with_names: Dict[str, str], market: str = "KR") -> Dict[str, Dict[str, Any]]:
@@ -116,7 +119,7 @@ class SentimentAnalysisService:
                 if headlines:
                     all_headlines[ticker] = headlines
             except Exception as e:
-                print(f"[WARNING] Batch news collection failed for {ticker}: {e}")
+                logger.warning(f"Batch news collection failed for {ticker}: {e}")
 
         if not all_headlines:
             return {}
@@ -126,7 +129,7 @@ class SentimentAnalysisService:
             try:
                 return self.sentiment_analyzer.llm_analyzer.analyze_tickers_batch(all_headlines)
             except Exception as e:
-                print(f"[ERROR] Gemini batch sentiment failed: {e}")
+                logger.error(f"Gemini batch sentiment failed: {e}")
         
         # 3. Fallback: 기존 키워드 방식
         results = {}
@@ -197,7 +200,7 @@ class SentimentAnalysisService:
             
             if db_news:
                 articles = db_news
-                print(f"[INFO] DB에서 {len(articles)}개 뉴스 로드 완료 (종목: {stock_name})")
+                logger.info(f"DB에서 {len(articles)}개 뉴스 로드 완료 (종목: {stock_name})")
             else:
                 # 3. Fallback: DB에 뉴스가 없으면 직접 수집
                 google_articles = self.news_collector.fetch_google_news_rss(
@@ -214,10 +217,10 @@ class SentimentAnalysisService:
                     )
                     articles.extend(press_articles)
                 
-                print(f"[INFO] 직접 수집: Google {len(google_articles)}개 + 한국 언론사 RSS = 총 {len(articles)}개")
+                logger.info(f"직접 수집: Google {len(google_articles)}개 + 한국 언론사 RSS = 총 {len(articles)}개")
                 
         except Exception as e:
-            print(f"[ERROR] 한국 뉴스 수집 실패: {e}")
+            logger.error(f"한국 뉴스 수집 실패: {e}")
         
         return articles
     
@@ -226,10 +229,10 @@ class SentimentAnalysisService:
         try:
             # Yahoo Finance 뉴스
             articles = self.news_collector.fetch_yahoo_news(ticker, max_results=20)
-            print(f"[INFO] Yahoo Finance에서 {len(articles)}개 뉴스 수집 완료")
+            logger.info(f"Yahoo Finance에서 {len(articles)}개 뉴스 수집 완료")
             return articles
         except Exception as e:
-            print(f"[ERROR] Yahoo Finance 뉴스 수집 실패: {e}")
+            logger.error(f"Yahoo Finance 뉴스 수집 실패: {e}")
             return []
     
     def _analyze_sentiments(self, articles: List[Dict], market: str) -> np.ndarray:

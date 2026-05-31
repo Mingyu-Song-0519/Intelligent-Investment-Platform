@@ -2,12 +2,15 @@
 News Repository - Infrastructure Layer
 INewsRepository 인터페이스의 구현체
 """
+import logging
 import requests
 from bs4 import BeautifulSoup
 import feedparser
 from typing import List, Dict, Optional
 from datetime import datetime
 import time
+
+logger = logging.getLogger(__name__)
 from urllib.parse import quote, urljoin
 
 from src.domain.repositories.interfaces import INewsRepository
@@ -93,7 +96,7 @@ class NaverNewsRepository(INewsRepository):
                             break
                             
                     except Exception as e:
-                        print(f"[ERROR] 뉴스 파싱 실패: {e}")
+                        logger.error(f"뉴스 파싱 실패: {e}")
                         continue
                 
                 if len(news_list) >= max_results:
@@ -105,7 +108,7 @@ class NaverNewsRepository(INewsRepository):
             return news_list[:max_results]
             
         except Exception as e:
-            print(f"[ERROR] NaverNewsRepository.get_news: {e}")
+            logger.error(f"NaverNewsRepository.get_news: {e}")
             return []
     
     def get_stock_news(
@@ -161,7 +164,7 @@ class GoogleNewsRepository(INewsRepository):
             return news_list
             
         except Exception as e:
-            print(f"[ERROR] GoogleNewsRepository.get_news: {e}")
+            logger.error(f"GoogleNewsRepository.get_news: {e}")
             return []
     
     def get_stock_news(

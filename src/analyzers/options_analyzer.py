@@ -2,11 +2,14 @@
 옵션 분석 모듈 - Put/Call Ratio, 내재변동성(IV) 등 옵션 데이터 분석
 2024-2025 트렌드: 0DTE 옵션, 감마 노출 등 옵션 시장 영향력 증가
 """
+import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple, List
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 
 class OptionsAnalyzer:
@@ -40,7 +43,7 @@ class OptionsAnalyzer:
             stock = self._get_stock()
             return list(stock.options)
         except Exception as e:
-            print(f"만기일 조회 오류: {e}")
+            logger.error(f"만기일 조회 오류: {e}")
             return []
     
     def get_options_chain(self, expiration: Optional[str] = None) -> Dict:
@@ -89,7 +92,7 @@ class OptionsAnalyzer:
             return result
             
         except Exception as e:
-            print(f"옵션 체인 조회 오류: {e}")
+            logger.error(f"옵션 체인 조회 오류: {e}")
             return {"calls": pd.DataFrame(), "puts": pd.DataFrame(), "error": str(e)}
     
     def calculate_put_call_ratio(self, expiration: Optional[str] = None) -> Dict:

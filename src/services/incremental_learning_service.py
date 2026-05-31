@@ -6,8 +6,11 @@ Clean Architecture:
 - UI는 이 서비스만 호출
 - 비즈니스 로직 캡슐화
 """
+import logging
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from typing import Tuple, Optional, Dict, Any
 from datetime import datetime
 from src.infrastructure.repositories.model_repository import ModelRepository
@@ -166,7 +169,7 @@ class IncrementalLearningService:
             return False, None
             
         except Exception as e:
-            print(f"[WARNING] Distribution shift detection failed: {e}")
+            logger.warning(f"Distribution shift detection failed: {e}")
             return False, None
     
     def _validate_feature_compatibility(
