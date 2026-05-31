@@ -208,7 +208,11 @@ class ScreenerService:
         recommendations = []
         for ticker in stage2_tickers:
             # 기본 데이터 매핑
-            name = name_map.get(ticker, self.KOREAN_STOCK_NAMES.get(ticker, ticker))
+            # KOREAN_STOCK_NAMES 키는 "005930.KS" 형식, ticker는 "005930" 6자리
+            name = (name_map.get(ticker)
+                    or self.KOREAN_STOCK_NAMES.get(f"{ticker}.KS")
+                    or self.KOREAN_STOCK_NAMES.get(ticker)
+                    or ticker)
             rsi_val = latest_rsi.get(ticker)
             ma_5 = latest_ma.loc[ticker, 'ma_5'] if ticker in latest_ma.index else None
             ma_20 = latest_ma.loc[ticker, 'ma_20'] if ticker in latest_ma.index else None
