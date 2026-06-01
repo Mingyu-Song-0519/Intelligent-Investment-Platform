@@ -10,6 +10,7 @@ from pathlib import Path
 
 # 모델 및 분석 관련
 from src.models.ensemble_predictor import EnsemblePredictor
+from src.models.predictor import TENSORFLOW_AVAILABLE, XGBOOST_AVAILABLE
 from src.collectors.stock_collector import StockDataCollector
 from src.analyzers.technical_analyzer import TechnicalAnalyzer
 from config import ENSEMBLE_CONFIG
@@ -31,7 +32,19 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 def display_ai_prediction():
     """AI 가격 예측 뷰 (완전한 옵션 포함)"""
     st.header("🔮 AI 가격 예측")
-    
+
+    # 모델 가용성 안내
+    if not TENSORFLOW_AVAILABLE or not XGBOOST_AVAILABLE:
+        unavailable = []
+        if not TENSORFLOW_AVAILABLE:
+            unavailable.append("LSTM (TensorFlow/Keras 미설치)")
+        if not XGBOOST_AVAILABLE:
+            unavailable.append("XGBoost (xgboost 미설치)")
+        st.info(
+            f"ℹ️ 현재 환경에서 사용 불가능한 모델: **{', '.join(unavailable)}**\n\n"
+            "로컬에서 `pip install -e '.[ml-boost,ml-tf]'` 설치 시 모든 모델을 사용할 수 있습니다."
+        )
+
     selected_ticker = st.session_state.get('selected_ticker')
     selected_stock = st.session_state.get('selected_stock', '삼성전자')
     

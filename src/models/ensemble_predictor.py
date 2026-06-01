@@ -10,7 +10,10 @@ from typing import Dict, List, Tuple, Optional, Any
 from config import ENSEMBLE_CONFIG
 
 logger = logging.getLogger(__name__)
-from src.models.predictor import LSTMPredictor, XGBoostClassifier, DataPreprocessor
+from src.models.predictor import (
+    LSTMPredictor, XGBoostClassifier, DataPreprocessor,
+    TENSORFLOW_AVAILABLE, XGBOOST_AVAILABLE,
+)
 
 # Transformer 모델
 try:
@@ -111,44 +114,48 @@ class EnsemblePredictor:
 
         # LSTM 학습
         if train_lstm:
-            if self.lstm_predictor is None:
-                self.lstm_predictor = LSTMPredictor()
-
-            logger.info("LSTM 모델 학습 중...")
-            lstm_result = self.lstm_predictor.train(
-                df=df,
-                feature_cols=feature_cols,
-                verbose=verbose,
-                incremental=incremental,
-                replay_buffer=replay_buffer
-            )
-            results['lstm'] = lstm_result
-            
-            if incremental and lstm_result.get('incremental'):
-                logger.info(f"LSTM Fine-tuning 완료 - RMSE: {lstm_result['rmse']:.2f} "
-                            f"(Replay: {lstm_result.get('replay_samples', 0)}, New: {lstm_result.get('new_samples', 0)})")
+            if not TENSORFLOW_AVAILABLE:
+                logger.warning("LSTM 학습 건너뜀: TensorFlow/Keras 미설치")
+                results['lstm'] = {'skipped': True, 'reason': 'tensorflow_not_installed'}
             else:
-                logger.info(f"LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
+                if self.lstm_predictor is None:
+                    self.lstm_predictor = LSTMPredictor()
+                logger.info("LSTM 모델 학습 중...")
+                lstm_result = self.lstm_predictor.train(
+                    df=df,
+                    feature_cols=feature_cols,
+                    verbose=verbose,
+                    incremental=incremental,
+                    replay_buffer=replay_buffer
+                )
+                results['lstm'] = lstm_result
+                if incremental and lstm_result.get('incremental'):
+                    logger.info(f"LSTM Fine-tuning 완료 - RMSE: {lstm_result['rmse']:.2f} "
+                                f"(Replay: {lstm_result.get('replay_samples', 0)}, New: {lstm_result.get('new_samples', 0)})")
+                else:
+                    logger.info(f"LSTM 학습 완료 - RMSE: {lstm_result['rmse']:.2f}")
 
         # XGBoost 학습
         if train_xgboost:
-            if self.xgboost_classifier is None:
-                self.xgboost_classifier = XGBoostClassifier()
-
-            logger.info("XGBoost 모델 학습 중...")
-            xgb_result = self.xgboost_classifier.train(
-                df=df,
-                feature_cols=feature_cols,
-                incremental=incremental,
-                replay_buffer=replay_buffer
-            )
-            results['xgboost'] = xgb_result
-            
-            if incremental and xgb_result.get('incremental'):
-                logger.info(f"XGBoost Incremental 완료 - Accuracy: {xgb_result['accuracy']:.2%} "
-                            f"(Estimators: {xgb_result.get('total_estimators', 'N/A')})")
+            if not XGBOOST_AVAILABLE:
+                logger.warning("XGBoost 학습 건너뜀: xgboost 미설치")
+                results['xgboost'] = {'skipped': True, 'reason': 'xgboost_not_installed'}
             else:
-                logger.info(f"XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
+                if self.xgboost_classifier is None:
+                    self.xgboost_classifier = XGBoostClassifier()
+                logger.info("XGBoost 모델 학습 중...")
+                xgb_result = self.xgboost_classifier.train(
+                    df=df,
+                    feature_cols=feature_cols,
+                    incremental=incremental,
+                    replay_buffer=replay_buffer
+                )
+                results['xgboost'] = xgb_result
+                if incremental and xgb_result.get('incremental'):
+                    logger.info(f"XGBoost Incremental 완료 - Accuracy: {xgb_result['accuracy']:.2%} "
+                                f"(Estimators: {xgb_result.get('total_estimators', 'N/A')})")
+                else:
+                    logger.info(f"XGBoost 학습 완료 - Accuracy: {xgb_result['accuracy']:.2%}")
 
         # Transformer 학습
         if train_transformer and TRANSFORMER_AVAILABLE:
@@ -544,19 +551,25 @@ class EnsemblePredictor:
 
     def load_models(self, prefix: str = 'ensemble'):
         """앙상블 모델들 로드"""
-        try:
-            if self.lstm_predictor is None:
-                self.lstm_predictor = LSTMPredictor()
-            self.lstm_predictor.load(f"{prefix}_lstm")
-        except (OSError, IOError) as e:
-            logger.warning(f"LSTM 모델 로드 실패: {e}")
+        if TENSORFLOW_AVAILABLE:
+            try:
+                if self.lstm_predictor is None:
+                    self.lstm_predictor = LSTMPredictor()
+                self.lstm_predictor.load(f"{prefix}_lstm")
+            except (OSError, IOError) as e:
+                logger.warning(f"LSTM 모델 로드 실패: {e}")
+        else:
+            logger.warning("LSTM 모델 로드 건너뜀: TensorFlow/Keras 미설치")
 
-        try:
-            if self.xgboost_classifier is None:
-                self.xgboost_classifier = XGBoostClassifier()
-            self.xgboost_classifier.load(f"{prefix}_xgboost")
-        except (OSError, IOError) as e:
-            logger.warning(f"XGBoost 모델 로드 실패: {e}")
+        if XGBOOST_AVAILABLE:
+            try:
+                if self.xgboost_classifier is None:
+                    self.xgboost_classifier = XGBoostClassifier()
+                self.xgboost_classifier.load(f"{prefix}_xgboost")
+            except (OSError, IOError) as e:
+                logger.warning(f"XGBoost 모델 로드 실패: {e}")
+        else:
+            logger.warning("XGBoost 모델 로드 건너뜀: xgboost 미설치")
 
         try:
             if TRANSFORMER_AVAILABLE:
