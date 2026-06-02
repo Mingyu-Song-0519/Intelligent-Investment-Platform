@@ -191,18 +191,31 @@ class GeminiClient(ILLMClient):
                 
             except Exception as e:  # AI API가 다양한 예외를 던질 수 있음
                 error_str = str(e)
-                # 429 Rate Limit 에러 시 재시도
                 if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
-                    wait_time = (attempt + 1) * 5  # 5초, 10초, 15초
+                    # 일일 쿼터 소진 vs 분당 속도 제한 구분
+                    is_daily_quota = 'quota' in error_str.lower() or 'daily' in error_str.lower() or 'per day' in error_str.lower()
+                    if is_daily_quota:
+                        # 일일 쿼터는 재시도해도 의미 없음 → 즉시 포기
+                        logger.error(f"[GeminiClient] Daily quota exhausted: {e}")
+                        raise RuntimeError(
+                            f"Gemini API 일일 무료 쿼터({self.selected_model_name}: 1,500회/일)를 모두 사용했습니다.\n"
+                            "• 내일 자동 초기화됩니다 (태평양 시간 자정 기준)\n"
+                            "• 사용량 확인: aistudio.google.com/apikey → 키 클릭 → Quota 탭"
+                        )
+                    wait_time = (attempt + 1) * 5  # 5초, 10초, 15초 (분당 속도 제한용)
                     logger.warning(f"[GeminiClient] Rate limit hit (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s...")
                     time.sleep(wait_time)
                     continue
-                
+
                 logger.error(f"[GeminiClient] Generation failed: {e}")
                 raise
-        
-        # 모든 재시도 실패
-        raise RuntimeError("Gemini API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.")
+
+        # 분당 속도 제한 재시도 모두 실패
+        raise RuntimeError(
+            f"Gemini API 분당 요청 한도를 초과했습니다 ({self.selected_model_name}: 15회/분).\n"
+            "• 1분 후 다시 시도해 주세요\n"
+            "• 사용량 확인: aistudio.google.com/apikey → 키 클릭 → Quota 탭"
+        )
 
     
     def is_available(self) -> bool:
