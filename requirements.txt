@@ -13,6 +13,11 @@ scipy>=1.11.0,<2.0.0
 scikit-learn>=1.3.0,<2.0.0
 xgboost>=2.0.0,<3.0.0
 
+# LSTM 예측 (Keras 3.x + JAX backend — TensorFlow 대비 경량 ~150MB)
+# predictor.py가 KERAS_BACKEND=jax 설정 후 import keras를 먼저 시도함
+keras>=3.0.0,<4.0.0
+jax[cpu]>=0.4.25
+
 # Visualization
 matplotlib>=3.7.0,<4.0.0
 plotly>=5.17.0,<6.0.0
